@@ -141,7 +141,9 @@ jobs:
       
       # Install project dependencies
       - name: Install project dependencies
-        run: bundle _${{ env.BUNDLER_VER }}_ install
+        run: |
+          bundle _${{ env.BUNDLER_VER }}_ install
+          bundle _${{ env.BUNDLER_VER }}_ update fastlane
 
       # Sync the GitHub runner clock with the Windows time server (workaround as suggested in https://github.com/actions/runner/issues/2996)
       - name: Sync clock
