@@ -1,0 +1,4 @@
+files:
+  - source: /RileyLinkKitUI/Localizable.xcstrings
+    translation: /RileyLinkKitUI/Localizable.xcstrings
+    multilingual: 1

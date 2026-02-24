@@ -22,9 +22,6 @@
 [submodule "dexcom-share-client-swift"]
 	path = dexcom-share-client-swift
 	url = https://github.com/Artificial-Pancreas/dexcom-share-client-swift.git
-[submodule "RileyLinkKit"]
-	path = RileyLinkKit
-	url = https://github.com/Artificial-Pancreas/RileyLinkKit
 [submodule "TidepoolService"]
 	path = TidepoolService
 	url = https://github.com/Artificial-Pancreas/TidepoolService.git

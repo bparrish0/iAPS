@@ -22,6 +22,10 @@
 		1901412F2CDB92F200ABD925 /* RestoreProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1901412E2CDB92E600ABD925 /* RestoreProvider.swift */; };
 		190141312CDB930400ABD925 /* RestoreStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190141302CDB92FB00ABD925 /* RestoreStateModel.swift */; };
 		190141342CDB931A00ABD925 /* RestoreRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190141332CDB931000ABD925 /* RestoreRootView.swift */; };
+		F2AA00072A0000070000AA01 /* RileyLinkLogDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AA00062A0000060000AA01 /* RileyLinkLogDataFlow.swift */; };
+		F2AA00092A0000090000AA01 /* RileyLinkLogProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AA00082A0000080000AA01 /* RileyLinkLogProvider.swift */; };
+		F2AA000B2A00000B0000AA01 /* RileyLinkLogStateModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AA000A2A00000A0000AA01 /* RileyLinkLogStateModel.swift */; };
+		F2AA000D2A00000D0000AA01 /* RileyLinkLogRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = F2AA000C2A00000C0000AA01 /* RileyLinkLogRootView.swift */; };
 		190141362CDB9D4B00ABD925 /* Token.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190141352CDB9D4600ABD925 /* Token.swift */; };
 		190EBCC429FF136900BA767D /* UIUXDataFlow.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190EBCC329FF136900BA767D /* UIUXDataFlow.swift */; };
 		190EBCC629FF138000BA767D /* UIUXProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 190EBCC529FF138000BA767D /* UIUXProvider.swift */; };
@@ -567,6 +571,10 @@
 		190141302CDB92FB00ABD925 /* RestoreStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreStateModel.swift; sourceTree = "<group>"; };
 		190141332CDB931000ABD925 /* RestoreRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestoreRootView.swift; sourceTree = "<group>"; };
 		190141352CDB9D4600ABD925 /* Token.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Token.swift; sourceTree = "<group>"; };
+		F2AA00062A0000060000AA01 /* RileyLinkLogDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RileyLinkLogDataFlow.swift; sourceTree = "<group>"; };
+		F2AA00082A0000080000AA01 /* RileyLinkLogProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RileyLinkLogProvider.swift; sourceTree = "<group>"; };
+		F2AA000A2A00000A0000AA01 /* RileyLinkLogStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RileyLinkLogStateModel.swift; sourceTree = "<group>"; };
+		F2AA000C2A00000C0000AA01 /* RileyLinkLogRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RileyLinkLogRootView.swift; sourceTree = "<group>"; };
 		190EBCC329FF136900BA767D /* UIUXDataFlow.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIUXDataFlow.swift; sourceTree = "<group>"; };
 		190EBCC529FF138000BA767D /* UIUXProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIUXProvider.swift; sourceTree = "<group>"; };
 		190EBCC729FF13AA00BA767D /* UIUXStateModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UIUXStateModel.swift; sourceTree = "<group>"; };
@@ -1214,6 +1222,25 @@
 			path = View;
 			sourceTree = "<group>";
 		};
+		F2AA00102A0000100000AA01 /* RileyLinkLog */ = {
+			isa = PBXGroup;
+			children = (
+				F2AA00062A0000060000AA01 /* RileyLinkLogDataFlow.swift */,
+				F2AA00082A0000080000AA01 /* RileyLinkLogProvider.swift */,
+				F2AA000A2A00000A0000AA01 /* RileyLinkLogStateModel.swift */,
+				F2AA00112A0000110000AA01 /* View */,
+			);
+			path = RileyLinkLog;
+			sourceTree = "<group>";
+		};
+		F2AA00112A0000110000AA01 /* View */ = {
+			isa = PBXGroup;
+			children = (
+				F2AA000C2A00000C0000AA01 /* RileyLinkLogRootView.swift */,
+			);
+			path = View;
+			sourceTree = "<group>";
+		};
 		1901412B2CDB92B500ABD925 /* Restore */ = {
 			isa = PBXGroup;
 			children = (
@@ -1564,6 +1591,7 @@
 				99C01B871ACAB3F32CE755C7 /* PumpConfig */,
 				E493126EA71765130F64CCE5 /* PumpSettingsEditor */,
 				1901412B2CDB92B500ABD925 /* Restore */,
+				F2AA00102A0000100000AA01 /* RileyLinkLog */,
 				3811DE3825C9D4A100A708ED /* Settings */,
 				19F191D92BE4F93400F6297E /* Sharing */,
 				29B478DF61BF8D270F7D8954 /* Snooze */,
@@ -3269,6 +3297,10 @@
 				CE7CA3582A064E2F004BE681 /* ListStateView.swift in Sources */,
 				193F6CDD2A512C8F001240FD /* Loops.swift in Sources */,
 				190141342CDB931A00ABD925 /* RestoreRootView.swift in Sources */,
+				F2AA00072A0000070000AA01 /* RileyLinkLogDataFlow.swift in Sources */,
+				F2AA00092A0000090000AA01 /* RileyLinkLogProvider.swift in Sources */,
+				F2AA000B2A00000B0000AA01 /* RileyLinkLogStateModel.swift in Sources */,
+				F2AA000D2A00000D0000AA01 /* RileyLinkLogRootView.swift in Sources */,
 				38B4F3CB25E502E200E76A18 /* WeakObjectSet.swift in Sources */,
 				38E989DD25F5021400C0CED0 /* PumpStatus.swift in Sources */,
 				BDFD165A2AE40438007F0DDA /* AlternativeBolusCalcRootView.swift in Sources */,

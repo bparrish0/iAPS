@@ -116,6 +116,7 @@ extension Settings {
                         Toggle("Debug options", isOn: $state.debugOptions)
                         if state.debugOptions {
                             Group {
+                                Text("RileyLink Logs").navigationLink(to: .rileyLinkLog, from: self)
                                 HStack {
                                     Text("NS Upload Profile and Settings")
                                     Button("Upload") { state.uploadProfileAndSettings(true) }
