@@ -12,13 +12,15 @@
 	url = https://github.com/Artificial-Pancreas/CGMBLEKit.git
 [submodule "MinimedKit"]
 	path = MinimedKit
-	url = https://github.com/Artificial-Pancreas/MinimedKit.git
+	url = https://github.com/bparrish0/MinimedKit.git
+	branch = voltage-alerts
 [submodule "OmniBLE"]
 	path = OmniBLE
 	url = https://github.com/Artificial-Pancreas/OmniBLE.git
 [submodule "OmniKit"]
 	path = OmniKit
-	url = https://github.com/Artificial-Pancreas/OmniKit.git
+	url = https://github.com/bparrish0/OmniKit.git
+	branch = voltage-alerts
 [submodule "dexcom-share-client-swift"]
 	path = dexcom-share-client-swift
 	url = https://github.com/Artificial-Pancreas/dexcom-share-client-swift.git
