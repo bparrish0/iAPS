@@ -275,7 +275,7 @@ extension Home {
             )
             .compactMap { $0.userInfo?["com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"] as? Float }
             .receive(on: DispatchQueue.main)
-            .weakAssign(to: \.orangeLinkVoltage, on: self)
+            .sink { [weak self] in self?.orangeLinkVoltage = $0 }
             .store(in: &lifetime)
 
             apsManager.lastError
