@@ -676,6 +676,9 @@ extension Home {
                                     )
                                     .padding(20)
                                     .offset(x: 5, y: -10)
+                                OrangeLinkVoltageView(voltage: $state.orangeLinkVoltage)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                                    .padding(.trailing, 25)
                             }
                             if displayGlucose {
                                 glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
