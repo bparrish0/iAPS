@@ -500,6 +500,10 @@ extension RileyLinkBluetoothDevice: PeripheralManagerDelegate {
         case .timerTick:
             NotificationCenter.default.post(name: .DeviceTimerDidTick, object: self)
             assertIdleListening(forceRestart: false)
+            // Poll voltage on OrangeLink devices
+            if hasOrangeLinkService {
+                orangeReadVDC()
+            }
         case .customName, .firmwareVersion, .ledMode:
             break
         }
@@ -528,6 +532,11 @@ extension RileyLinkBluetoothDevice: PeripheralManagerDelegate {
                     let int = UInt16(bigEndian: Data(data[3...4]).withUnsafeBytes { $0.load(as: UInt16.self) })
                     voltage = Float(int) / 1000
                     NotificationCenter.default.post(name: .DeviceStatusUpdated, object: self)
+                    NotificationCenter.default.post(
+                        name: .DeviceVoltageUpdated,
+                        object: self,
+                        userInfo: [RileyLinkBluetoothDevice.voltageKey: voltage!]
+                    )
                 }
             }
         }
@@ -594,6 +603,8 @@ extension RileyLinkBluetoothDevice {
     public static let notificationRSSIKey = "com.rileylink.RileyLinkBLEKit.RileyLinkDevice.NotificationRSSI"
 
     public static let batteryLevelKey = "com.rileylink.RileyLinkBLEKit.RileyLinkDevice.BatteryLevel"
+
+    public static let voltageKey = "com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"
 }
 
 
@@ -613,4 +624,6 @@ extension Notification.Name {
     public static let DeviceStatusUpdated = Notification.Name(rawValue: "com.rileylink.RileyLinkBLEKit.DeviceStatusUpdated")
 
     public static let DeviceBatteryLevelUpdated = Notification.Name(rawValue: "com.rileylink.RileyLinkBLEKit.BatteryLevelUpdated")
+
+    public static let DeviceVoltageUpdated = Notification.Name(rawValue: "com.rileylink.RileyLinkBLEKit.VoltageUpdated")
 }

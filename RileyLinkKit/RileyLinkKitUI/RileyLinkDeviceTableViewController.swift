@@ -104,18 +104,18 @@ public class RileyLinkDeviceTableViewController: UITableViewController {
 
     private var appeared = false
     
-    private var batteryAlertLevel: Int? {
+    private var voltageAlertLevel: Float? {
         didSet {
-            batteryAlertLevelChanged?(batteryAlertLevel)
+            voltageAlertLevelChanged?(voltageAlertLevel)
         }
     }
-    
-    private var batteryAlertLevelChanged: ((Int?) -> Void)?
 
-    public init(device: RileyLinkDevice, batteryAlertLevel: Int?, batteryAlertLevelChanged: ((Int?) -> Void)? ) {
+    private var voltageAlertLevelChanged: ((Float?) -> Void)?
+
+    public init(device: RileyLinkDevice, voltageAlertLevel: Float?, voltageAlertLevelChanged: ((Float?) -> Void)? ) {
         self.device = device
-        self.batteryAlertLevel = batteryAlertLevel
-        self.batteryAlertLevelChanged = batteryAlertLevelChanged
+        self.voltageAlertLevel = voltageAlertLevel
+        self.voltageAlertLevelChanged = voltageAlertLevelChanged
 
         super.init(style: .grouped)
 
@@ -579,7 +579,7 @@ public class RileyLinkDeviceTableViewController: UITableViewController {
             case .battery:
                 cell.accessoryType = .disclosureIndicator
                 cell.textLabel?.text = LocalizedString("Low Battery Alert", comment: "The title of the cell showing battery level")
-                cell.setBatteryAlert(batteryAlertLevel, formatter: integerFormatter)
+                cell.setVoltageAlert(voltageAlertLevel)
             }
         case .rileyLinkCommands:
             switch RileyLinkCommandRow(rawValue: indexPath.row)! {
@@ -727,16 +727,17 @@ public class RileyLinkDeviceTableViewController: UITableViewController {
         case .alert:
             switch AlertRow(rawValue: indexPath.row)! {
             case .battery:
-                let alert = UIAlertController.init(title: "Battery level Alert", message: nil, preferredStyle: .actionSheet)
-                let action = UIAlertAction.init(title: "OFF", style: .default) { _ in
-                    self.batteryAlertLevel = nil
+                let alert = UIAlertController.init(title: "Voltage Alert", message: nil, preferredStyle: .actionSheet)
+                let offAction = UIAlertAction.init(title: "OFF", style: .default) { _ in
+                    self.voltageAlertLevel = nil
                     self.tableView.reloadData()
                 }
-                alert.addAction(action)
+                alert.addAction(offAction)
 
-                for value in [20,30,40,50] {
-                    let action = UIAlertAction.init(title: "\(value)%", style: .default) { _ in
-                        self.batteryAlertLevel = value
+                let voltageOptions: [Float] = [3.1, 3.0, 2.9, 2.8, 2.7, 2.6, 2.5, 2.4]
+                for value in voltageOptions {
+                    let action = UIAlertAction.init(title: String(format: "%.1fV", value), style: .default) { _ in
+                        self.voltageAlertLevel = value
                         self.tableView.reloadData()
                     }
                     alert.addAction(action)
@@ -840,7 +841,11 @@ private extension UITableViewCell {
         }
     }
     
-    func setBatteryAlert(_ level: Int?, formatter: NumberFormatter) {
-        detailTextLabel?.text = formatter.percentString(from: level) ?? LocalizedString("Off", comment: "Detail text when battery alert disabled.")
+    func setVoltageAlert(_ level: Float?) {
+        if let level = level {
+            detailTextLabel?.text = String(format: "%.1fV", level)
+        } else {
+            detailTextLabel?.text = LocalizedString("Off", comment: "Detail text when battery alert disabled.")
+        }
     }
 }

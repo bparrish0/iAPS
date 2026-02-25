@@ -22,6 +22,7 @@ open class RileyLinkPumpManager {
         NotificationCenter.default.addObserver(self, selector: #selector(receivedRileyLinkPacketNotification(_:)), name: .DevicePacketReceived, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(receivedRileyLinkTimerTickNotification(_:)), name: .DeviceTimerDidTick, object: nil)
         NotificationCenter.default.addObserver(self, selector: #selector(receivedRileyLinkBatteryUpdate(_:)), name: .DeviceBatteryLevelUpdated, object: nil)
+        NotificationCenter.default.addObserver(self, selector: #selector(receivedRileyLinkVoltageUpdate(_:)), name: .DeviceVoltageUpdated, object: nil)
 
     }
     
@@ -41,6 +42,8 @@ open class RileyLinkPumpManager {
     open func deviceTimerDidTick(_ device: RileyLinkDevice) { }
 
     open func device(_ device: RileyLinkDevice, didUpdateBattery level: Int) { }
+
+    open func device(_ device: RileyLinkDevice, didUpdateVoltage voltage: Float) { }
 
     // MARK: - CustomDebugStringConvertible
     
@@ -86,6 +89,16 @@ extension RileyLinkPumpManager {
         self.deviceTimerDidTick(device)
     }
     
+
+    @objc private func receivedRileyLinkVoltageUpdate(_ note: Notification) {
+        guard let device = note.object as? RileyLinkDevice,
+              let voltage = note.userInfo?[RileyLinkBluetoothDevice.voltageKey] as? Float
+        else {
+            return
+        }
+
+        self.device(device, didUpdateVoltage: voltage)
+    }
 
     @objc private func receivedRileyLinkBatteryUpdate(_ note: Notification) {
         guard let device = note.object as? RileyLinkDevice,
