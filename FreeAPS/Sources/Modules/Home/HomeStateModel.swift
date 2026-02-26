@@ -270,7 +270,7 @@ extension Home {
                 .weakAssign(to: \.pumpExpiresAtDate, on: self)
                 .store(in: &lifetime)
 
-            let voltageSub: AnyCancellable = NotificationCenter.default.publisher(
+            let voltageSub: AnyCancellable = Foundation.NotificationCenter.default.publisher(
                 for: Notification.Name("com.rileylink.RileyLinkBLEKit.VoltageUpdated")
             )
             .receive(on: DispatchQueue.main)
