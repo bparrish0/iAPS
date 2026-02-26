@@ -273,9 +273,12 @@ extension Home {
             NotificationCenter.default.publisher(
                 for: Notification.Name("com.rileylink.RileyLinkBLEKit.VoltageUpdated")
             )
-            .compactMap { $0.userInfo?["com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"] as? Float }
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] in self?.orangeLinkVoltage = $0 }
+            .sink { [weak self] notification in
+                if let voltage = notification.userInfo?["com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"] as? Float {
+                    self?.orangeLinkVoltage = voltage
+                }
+            }
             .store(in: &lifetime)
 
             apsManager.lastError

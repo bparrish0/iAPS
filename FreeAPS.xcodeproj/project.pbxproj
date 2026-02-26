@@ -239,6 +239,7 @@
 		38D0B3B625EBE24900CB6E88 /* Battery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D0B3B525EBE24900CB6E88 /* Battery.swift */; };
 		38D0B3D925EC07C400CB6E88 /* CarbsEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D0B3D825EC07C400CB6E88 /* CarbsEntry.swift */; };
 		38DAB280260CBB7F00F74C1A /* PumpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DAB27F260CBB7F00F74C1A /* PumpView.swift */; };
+		64416ACA0C1A5244F406C005 /* OrangeLinkVoltageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEBE9119B27517E91FC551C2 /* OrangeLinkVoltageView.swift */; };
 		38DF1786276A73D400B3528F /* TagCloudView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DF1785276A73D400B3528F /* TagCloudView.swift */; };
 		38DF1789276FC8C400B3528F /* SwiftMessages in Frameworks */ = {isa = PBXBuildFile; productRef = 38DF1788276FC8C400B3528F /* SwiftMessages */; };
 		38DF178D27733E6800B3528F /* snow.sks in Resources */ = {isa = PBXBuildFile; fileRef = 38DF178B27733E6800B3528F /* snow.sks */; };
@@ -875,6 +876,7 @@
 		38D0B3B525EBE24900CB6E88 /* Battery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Battery.swift; sourceTree = "<group>"; };
 		38D0B3D825EC07C400CB6E88 /* CarbsEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsEntry.swift; sourceTree = "<group>"; };
 		38DAB27F260CBB7F00F74C1A /* PumpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PumpView.swift; sourceTree = "<group>"; };
+		EEBE9119B27517E91FC551C2 /* OrangeLinkVoltageView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrangeLinkVoltageView.swift; sourceTree = "<group>"; };
 		38DF1785276A73D400B3528F /* TagCloudView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TagCloudView.swift; sourceTree = "<group>"; };
 		38DF178B27733E6800B3528F /* snow.sks */ = {isa = PBXFileReference; lastKnownFileType = file.sks; path = snow.sks; sourceTree = "<group>"; };
 		38DF178C27733E6800B3528F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
@@ -1902,6 +1904,7 @@
 			children = (
 				383420D525FFE38C002D46C1 /* LoopView.swift */,
 				38AAF85425FFF846004AF583 /* CurrentGlucoseView.swift */,
+				EEBE9119B27517E91FC551C2 /* OrangeLinkVoltageView.swift */,
 				38DAB27F260CBB7F00F74C1A /* PumpView.swift */,
 			);
 			path = Header;
@@ -3189,6 +3192,7 @@
 				CE94597E29E9E1EE0047C9C6 /* GarminManager.swift in Sources */,
 				3883583425EEB38000E024B2 /* PumpSettings.swift in Sources */,
 				38DAB280260CBB7F00F74C1A /* PumpView.swift in Sources */,
+				64416ACA0C1A5244F406C005 /* OrangeLinkVoltageView.swift in Sources */,
 				3811DEB125C9D88300A708ED /* Keychain.swift in Sources */,
 				382C133725F13A1E00715CE1 /* InsulinSensitivities.swift in Sources */,
 				19D466A529AA2BD4004D5F33 /* FPUConfigProvider.swift in Sources */,
