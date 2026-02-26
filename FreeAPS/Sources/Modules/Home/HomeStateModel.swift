@@ -270,16 +270,16 @@ extension Home {
                 .weakAssign(to: \.pumpExpiresAtDate, on: self)
                 .store(in: &lifetime)
 
-            NotificationCenter.default.publisher(
+            let voltageSub: AnyCancellable = NotificationCenter.default.publisher(
                 for: Notification.Name("com.rileylink.RileyLinkBLEKit.VoltageUpdated")
             )
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] notification in
+            .sink { [weak self] (notification: Notification) in
                 if let voltage = notification.userInfo?["com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"] as? Float {
                     self?.orangeLinkVoltage = voltage
                 }
             }
-            .store(in: &lifetime)
+            voltageSub.store(in: &lifetime)
 
             apsManager.lastError
                 .receive(on: DispatchQueue.main)
