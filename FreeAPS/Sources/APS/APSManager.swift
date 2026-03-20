@@ -1479,7 +1479,8 @@ extension BaseAPSManager: PumpManagerStatusObserver {
             percent: percent,
             voltage: nil,
             string: percent > 10 ? .normal : .low,
-            display: status.pumpBatteryChargeRemaining != nil
+            display: status.pumpBatteryChargeRemaining != nil,
+            lifetimeDays: nil
         )
         storage.save(battery, as: OpenAPS.Monitor.battery)
         storage.save(status.pumpStatus, as: OpenAPS.Monitor.status)
