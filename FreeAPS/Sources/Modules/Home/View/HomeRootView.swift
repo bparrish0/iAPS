@@ -676,9 +676,9 @@ extension Home {
                                     )
                                     .padding(20)
                                     .offset(x: 5, y: -10)
-                                OrangeLinkVoltageView(voltage: $state.orangeLinkVoltage)
+                                BatteryTimeRemainingView(battery: $state.battery, timerDate: $state.data.timerDate)
                                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
-                                    .padding(.trailing, 25)
+                                    .padding(.trailing, 15)
                             }
                             if displayGlucose {
                                 glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)

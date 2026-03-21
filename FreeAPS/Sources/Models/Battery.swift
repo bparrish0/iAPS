@@ -5,7 +5,7 @@ struct Battery: JSON {
     let voltage: Decimal?
     let string: BatteryState
     let display: Bool?
-    let lifetimeDays: Double?
+    let batteryExpirationDate: Date?
 }
 
 enum BatteryState: String, JSON {

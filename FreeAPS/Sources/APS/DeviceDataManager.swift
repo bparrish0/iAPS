@@ -591,13 +591,13 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
         }
 
         let batteryPercent = Int((status.pumpBatteryChargeRemaining ?? 1) * 100)
-        let lifetimeDays = (pumpManager as? MinimedPumpManager)?.batteryLifetimeDays
+        let expirationDate = (pumpManager as? MinimedPumpManager)?.batteryExpirationDate
         let battery = Battery(
             percent: batteryPercent,
             voltage: nil,
             string: batteryPercent >= 10 ? .normal : .low,
             display: pumpManager.status.pumpBatteryChargeRemaining != nil,
-            lifetimeDays: lifetimeDays
+            batteryExpirationDate: expirationDate
         )
         storage.save(battery, as: OpenAPS.Monitor.battery)
         broadcaster.notify(PumpBatteryObserver.self, on: processQueue) {

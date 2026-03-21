@@ -32,7 +32,6 @@ extension Home {
         @Published var lastLoopDate: Date = .distantPast
         @Published var tempRate: Decimal?
         @Published var battery: Battery?
-        @Published var orangeLinkVoltage: Float?
         @Published var reservoir: Decimal?
         @Published var pumpName = ""
         @Published var pumpExpiresAtDate: Date?
@@ -269,17 +268,6 @@ extension Home {
                 .receive(on: DispatchQueue.main)
                 .weakAssign(to: \.pumpExpiresAtDate, on: self)
                 .store(in: &lifetime)
-
-            let voltageSub: AnyCancellable = Foundation.NotificationCenter.default.publisher(
-                for: Notification.Name("com.rileylink.RileyLinkBLEKit.VoltageUpdated")
-            )
-            .receive(on: DispatchQueue.main)
-            .sink { [weak self] (notification: Notification) in
-                if let voltage = notification.userInfo?["com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"] as? Float {
-                    self?.orangeLinkVoltage = voltage
-                }
-            }
-            voltageSub.store(in: &lifetime)
 
             apsManager.lastError
                 .receive(on: DispatchQueue.main)

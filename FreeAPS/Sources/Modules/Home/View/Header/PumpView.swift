@@ -188,23 +188,15 @@ struct PumpView: View {
 
                 // MDT and Dana
                 if let battery = battery, !state.pumpName.contains("Omni"), !nano {
-                    VStack(spacing: 1) {
-                        if let lifetimeDays = battery.lifetimeDays, let percent = battery.percent {
-                            let remainingSeconds = lifetimeDays * Double(percent) / 100.0 * 86400
-                            batteryTimeRemaining(seconds: remainingSeconds)
-                                .font(.system(size: 9, weight: .medium))
-                                .foregroundStyle(remainingSeconds < 86400 ? .red : .secondary)
-                        }
-                        let percent = (battery.percent ?? 100) > 80 ? 100 : (battery.percent ?? 100) < 81 &&
-                            (battery.percent ?? 100) >
-                            60 ? 75 : (battery.percent ?? 100) < 61 && (battery.percent ?? 100) > 40 ? 50 : 25
-                        Image(systemName: "battery.\(percent)")
-                            .resizable()
-                            .rotationEffect(.degrees(-90))
-                            .frame(maxWidth: 32, maxHeight: 12)
-                            .foregroundColor(batteryColor)
-                            .offset(x: -5, y: -0.7)
-                    }
+                    let percent = (battery.percent ?? 100) > 80 ? 100 : (battery.percent ?? 100) < 81 &&
+                        (battery.percent ?? 100) >
+                        60 ? 75 : (battery.percent ?? 100) < 61 && (battery.percent ?? 100) > 40 ? 50 : 25
+                    Image(systemName: "battery.\(percent)")
+                        .resizable()
+                        .rotationEffect(.degrees(-90))
+                        .frame(maxWidth: 32, maxHeight: 12)
+                        .foregroundColor(batteryColor)
+                        .offset(x: -5, y: -0.7)
                 }
             }
         }
@@ -245,26 +237,6 @@ struct PumpView: View {
                 }
             } else {
                 Text(NSLocalizedString("Replace", comment: "View/Header when pod expired")).foregroundStyle(.red)
-            }
-        }
-    }
-
-    private func batteryTimeRemaining(seconds: Double) -> some View {
-        let days = Int(seconds / 86400)
-        let hours = Int(seconds.truncatingRemainder(dividingBy: 86400) / 3600)
-        let minutes = Int(seconds.truncatingRemainder(dividingBy: 3600) / 60)
-
-        return HStack(spacing: 0) {
-            if days >= 1 {
-                Text("\(days)")
-                Text("d").foregroundStyle(.secondary)
-                Text("\(hours)")
-                Text("h").foregroundStyle(.secondary)
-            } else {
-                Text("\(hours)")
-                Text("h").foregroundStyle(.secondary)
-                Text("\(minutes)")
-                Text("m").foregroundStyle(.secondary)
             }
         }
     }
