@@ -677,8 +677,9 @@ extension Home {
                                     .padding(20)
                                     .offset(x: 5, y: -10)
                                 BatteryTimeRemainingView(battery: $state.battery, timerDate: $state.data.timerDate)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
                                     .padding(.trailing, 15)
+                                    .padding(.bottom, 30)
                             }
                             if displayGlucose {
                                 glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
