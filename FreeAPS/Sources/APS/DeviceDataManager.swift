@@ -177,6 +177,16 @@ final class BaseDeviceDataManager: Injectable, DeviceDataManager {
         UIDevice.current.isBatteryMonitoringEnabled = true
         broadcaster.register(AlertObserver.self, observer: self)
 
+        Foundation.NotificationCenter.default.publisher(
+            for: Notification.Name("com.rileylink.RileyLinkBLEKit.VoltageUpdated")
+        )
+        .sink { [weak self] (notification: Notification) in
+            if let voltage = notification.userInfo?["com.rileylink.RileyLinkBLEKit.RileyLinkDevice.Voltage"] as? Float {
+                self?.trackOrangeLinkVoltage(Double(voltage))
+            }
+        }
+        .store(in: &lifetime)
+
         setupPump()
         setupCGM()
 
@@ -192,6 +202,19 @@ final class BaseDeviceDataManager: Injectable, DeviceDataManager {
                 self.notifyObserversOfDisplayGlucoseUnitChange(to: unit)
             }
             .store(in: &lifetime)
+    }
+
+    /// Update the persisted OrangeLink battery voltage log with a new reading and notify the UI.
+    /// Serialized on `processQueue` so concurrent BLE voltage callbacks don't corrupt the log.
+    private func trackOrangeLinkVoltage(_ voltage: Double) {
+        processQueue.async { [weak self] in
+            guard let self = self else { return }
+            var log = self.storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: OrangeLinkBatteryLog.self)
+                ?? OrangeLinkBatteryLog()
+            OrangeLinkBatteryTracker.record(voltage: voltage, at: Date(), into: &log)
+            self.storage.save(log, as: OpenAPS.Monitor.orangeLinkBattery)
+            Foundation.NotificationCenter.default.post(name: .orangeLinkBatteryUpdated, object: nil)
+        }
     }
 
     var availablePumpManagers: [PumpManagerDescriptor] {

@@ -126,6 +126,10 @@ extension Home {
             storage.retrieve(OpenAPS.Monitor.battery, as: Battery.self)
         }
 
+        func orangeLinkBattery() -> OrangeLinkBatteryLog? {
+            storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: OrangeLinkBatteryLog.self)
+        }
+
         func pumpReservoir() -> Decimal? {
             storage.retrieve(OpenAPS.Monitor.reservoir, as: Decimal.self)
         }

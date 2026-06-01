@@ -17,6 +17,7 @@ protocol HomeProvider: Provider {
     func tempTargets(hours: Int) -> [TempTarget]
     func carbs(hours: Int) -> [CarbsEntry]
     func pumpBattery() -> Battery?
+    func orangeLinkBattery() -> OrangeLinkBatteryLog?
     func pumpReservoir() -> Decimal?
     func tempTarget() -> TempTarget?
     func announcement(_ hours: Int) -> [Announcement]

@@ -32,6 +32,7 @@ extension Home {
         @Published var lastLoopDate: Date = .distantPast
         @Published var tempRate: Decimal?
         @Published var battery: Battery?
+        @Published var orangeLinkExpirationDate: Date?
         @Published var reservoir: Decimal?
         @Published var pumpName = ""
         @Published var pumpExpiresAtDate: Date?
@@ -149,6 +150,7 @@ extension Home {
             setupTempTargets()
             setupCarbs()
             setupBattery()
+            setupOrangeLinkBattery()
             setupReservoir()
             setupAnnouncements()
             setupCurrentPumpTimezone()
@@ -599,6 +601,21 @@ extension Home {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.battery = self.provider.pumpBattery()
+            }
+        }
+
+        private func setupOrangeLinkBattery() {
+            refreshOrangeLinkBattery()
+            Foundation.NotificationCenter.default.publisher(for: .orangeLinkBatteryUpdated)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshOrangeLinkBattery() }
+                .store(in: &lifetime)
+        }
+
+        private func refreshOrangeLinkBattery() {
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.orangeLinkExpirationDate = self.provider.orangeLinkBattery()?.currentExpirationDate
             }
         }
 

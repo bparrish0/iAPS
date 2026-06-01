@@ -237,6 +237,7 @@
 		38C4D33725E9A1A300D30B77 /* DispatchQueue+Extensions.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4D33625E9A1A200D30B77 /* DispatchQueue+Extensions.swift */; };
 		38C4D33A25E9A1ED00D30B77 /* NSObject+AssociatedValues.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38C4D33925E9A1ED00D30B77 /* NSObject+AssociatedValues.swift */; };
 		38D0B3B625EBE24900CB6E88 /* Battery.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D0B3B525EBE24900CB6E88 /* Battery.swift */; };
+		B70A12340001000000000002 /* OrangeLinkBattery.swift in Sources */ = {isa = PBXBuildFile; fileRef = B70A12340001000000000001 /* OrangeLinkBattery.swift */; };
 		38D0B3D925EC07C400CB6E88 /* CarbsEntry.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38D0B3D825EC07C400CB6E88 /* CarbsEntry.swift */; };
 		38DAB280260CBB7F00F74C1A /* PumpView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 38DAB27F260CBB7F00F74C1A /* PumpView.swift */; };
 		64416ACA0C1A5244F406C005 /* BatteryTimeRemainingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EEBE9119B27517E91FC551C2 /* BatteryTimeRemainingView.swift */; };
@@ -874,6 +875,7 @@
 		38C4D33625E9A1A200D30B77 /* DispatchQueue+Extensions.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "DispatchQueue+Extensions.swift"; sourceTree = "<group>"; };
 		38C4D33925E9A1ED00D30B77 /* NSObject+AssociatedValues.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = "NSObject+AssociatedValues.swift"; sourceTree = "<group>"; };
 		38D0B3B525EBE24900CB6E88 /* Battery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Battery.swift; sourceTree = "<group>"; };
+		B70A12340001000000000001 /* OrangeLinkBattery.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OrangeLinkBattery.swift; sourceTree = "<group>"; };
 		38D0B3D825EC07C400CB6E88 /* CarbsEntry.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CarbsEntry.swift; sourceTree = "<group>"; };
 		38DAB27F260CBB7F00F74C1A /* PumpView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PumpView.swift; sourceTree = "<group>"; };
 		EEBE9119B27517E91FC551C2 /* BatteryTimeRemainingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryTimeRemainingView.swift; sourceTree = "<group>"; };
@@ -2017,6 +2019,7 @@
 				19F191E32BE686AE00F6297E /* BareMinimum.swift */,
 				388358C725EEF6D200E024B2 /* BasalProfileEntry.swift */,
 				38D0B3B525EBE24900CB6E88 /* Battery.swift */,
+				B70A12340001000000000001 /* OrangeLinkBattery.swift */,
 				382C134A25F14E3700715CE1 /* BGTargets.swift */,
 				3870FF4225EC13F40088248F /* BloodGlucose.swift */,
 				38A9260425F012D8009E3739 /* CarbRatios.swift */,
@@ -3149,6 +3152,7 @@
 				38FCF3FD25E997A80078B0D1 /* PumpHistoryStorage.swift in Sources */,
 				19F191E22BE4F9BA00F6297E /* SharingRootView.swift in Sources */,
 				38D0B3B625EBE24900CB6E88 /* Battery.swift in Sources */,
+				B70A12340001000000000002 /* OrangeLinkBattery.swift in Sources */,
 				38C4D33725E9A1A300D30B77 /* DispatchQueue+Extensions.swift in Sources */,
 				F90692CF274B999A0037068D /* HealthKitDataFlow.swift in Sources */,
 				CE7CA3552A064973004BE681 /* ListStateIntent.swift in Sources */,

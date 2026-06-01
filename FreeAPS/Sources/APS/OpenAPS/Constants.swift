@@ -70,6 +70,7 @@ extension OpenAPS {
         static let dynamicVariables = "monitor/dynamicVariables.json"
         static let alertHistory = "monitor/alerthistory.json"
         static let statistics = "monitor/statistics.json"
+        static let orangeLinkBattery = "monitor/orangelink-battery.json"
     }
 
     enum Enact {

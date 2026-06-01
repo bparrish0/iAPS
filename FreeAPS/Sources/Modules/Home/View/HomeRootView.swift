@@ -676,10 +676,24 @@ extension Home {
                                     )
                                     .padding(20)
                                     .offset(x: 5, y: -10)
-                                BatteryTimeRemainingView(battery: $state.battery, timerDate: $state.data.timerDate)
-                                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                                    .padding(.trailing, 15)
-                                    .padding(.bottom, 50)
+                                BatteryTimeRemainingView(
+                                    expirationDate: state.battery?.batteryExpirationDate,
+                                    label: "P",
+                                    labelColor: .purple,
+                                    timerDate: $state.data.timerDate
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                                .padding(.trailing, 15)
+                                .padding(.bottom, 50)
+                                BatteryTimeRemainingView(
+                                    expirationDate: state.orangeLinkExpirationDate,
+                                    label: "O",
+                                    labelColor: .orange,
+                                    timerDate: $state.data.timerDate
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                                .padding(.leading, 15)
+                                .padding(.bottom, 50)
                             }
                             if displayGlucose {
                                 glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
