@@ -625,23 +625,23 @@ extension Home {
             refreshInsulinTimeRemaining()
         }
 
-        /// Estimate hours-of-insulin-remaining from the last 24h of pump history and the current
-        /// reservoir. Updated whenever pump history or reservoir changes; the UI's timer tick
+        /// Estimate hours-of-insulin-remaining from the recent rolling-24h TDD (the same value
+        /// shown elsewhere as "TDD yesterday") and the current reservoir. Averages the latest
+        /// few stored TDD records for smoothness so a single big-bolus day doesn't whipsaw the
+        /// estimate. Updated whenever pump history or reservoir changes; the UI's timer tick
         /// then counts the estimate down in real time.
         func refreshInsulinTimeRemaining() {
-            let history = provider.pumpHistory(hours: 24)
-            let increment = Double(truncating: settingsManager.preferences.bolusIncrement as NSDecimalNumber)
-            let tdd = TotalDailyDose().totalDailyDose(history, increment: increment)
-            let totalUnits = tdd.bolus + tdd.basal
-            guard tdd.hours > 0,
-                  totalUnits > 0,
+            let tdds = CoreDataStorage().fetchTDD(interval: DateFilter().tenDays)
+            let recent = tdds.prefix(7).compactMap { $0.tdd?.decimalValue }.filter { $0 > 0 }
+            guard !recent.isEmpty,
                   let reservoir = provider.pumpReservoir(),
                   reservoir > 0
             else {
                 DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = nil }
                 return
             }
-            let unitsPerHour = totalUnits / Decimal(tdd.hours)
+            let avgDailyUnits = recent.reduce(0, +) / Decimal(recent.count)
+            let unitsPerHour = avgDailyUnits / 24
             let hoursRemaining = Double(truncating: (reservoir / unitsPerHour) as NSDecimalNumber)
             let expiration = Date().addingTimeInterval(hoursRemaining * 3600)
             DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = expiration }
