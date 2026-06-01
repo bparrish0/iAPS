@@ -34,6 +34,8 @@ extension Home {
         @Published var battery: Battery?
         @Published var orangeLinkExpirationDate: Date?
         @Published var insulinExpirationDate: Date?
+        @Published var insulinEstimateUsesLatestTddOnly: Bool = UserDefaults.standard
+            .bool(forKey: "insulinEstimateUsesLatestTddOnly")
         @Published var reservoir: Decimal?
         @Published var pumpName = ""
         @Published var pumpExpiresAtDate: Date?
@@ -628,11 +630,14 @@ extension Home {
         /// Estimate hours-of-insulin-remaining from the recent rolling-24h TDD (the same value
         /// shown elsewhere as "TDD yesterday") and the current reservoir. Averages the latest
         /// few stored TDD records for smoothness so a single big-bolus day doesn't whipsaw the
-        /// estimate. Updated whenever pump history or reservoir changes; the UI's timer tick
-        /// then counts the estimate down in real time.
+        /// estimate — or, when the user has tapped the I view to switch modes, uses just the
+        /// single most recent TDD record (useful when usage has suddenly shifted, e.g. vacation).
+        /// Updated whenever pump history or reservoir changes; the UI's timer tick then counts
+        /// the estimate down in real time.
         func refreshInsulinTimeRemaining() {
             let tdds = CoreDataStorage().fetchTDD(interval: DateFilter().tenDays)
-            let recent = tdds.prefix(7).compactMap { $0.tdd?.decimalValue }.filter { $0 > 0 }
+            let limit = insulinEstimateUsesLatestTddOnly ? 1 : 7
+            let recent = tdds.prefix(limit).compactMap { $0.tdd?.decimalValue }.filter { $0 > 0 }
             guard !recent.isEmpty,
                   let reservoir = provider.pumpReservoir(),
                   reservoir > 0
@@ -645,6 +650,14 @@ extension Home {
             let hoursRemaining = Double(truncating: (reservoir / unitsPerHour) as NSDecimalNumber)
             let expiration = Date().addingTimeInterval(hoursRemaining * 3600)
             DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = expiration }
+        }
+
+        /// Toggle between rolling-7-record average (default, smoother) and single latest TDD
+        /// (snappier — picks up day-over-day usage changes immediately). Persists across reboots.
+        func toggleInsulinEstimateMode() {
+            insulinEstimateUsesLatestTddOnly.toggle()
+            UserDefaults.standard.set(insulinEstimateUsesLatestTddOnly, forKey: "insulinEstimateUsesLatestTddOnly")
+            refreshInsulinTimeRemaining()
         }
 
         private func setupCurrentTempTarget() {

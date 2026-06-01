@@ -700,8 +700,11 @@ extension Home {
                                     labelColor: .insulin,
                                     timerDate: $state.data.timerDate
                                 )
+                                .italic(state.insulinEstimateUsesLatestTddOnly)
+                                .padding(6)
+                                .contentShape(Rectangle())
+                                .onTapGesture { state.toggleInsulinEstimateMode() }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-                                .padding(.top, 4)
                             }
                             if displayGlucose {
                                 glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
