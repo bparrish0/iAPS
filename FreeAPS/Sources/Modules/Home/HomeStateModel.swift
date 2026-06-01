@@ -33,6 +33,7 @@ extension Home {
         @Published var tempRate: Decimal?
         @Published var battery: Battery?
         @Published var orangeLinkExpirationDate: Date?
+        @Published var insulinExpirationDate: Date?
         @Published var reservoir: Decimal?
         @Published var pumpName = ""
         @Published var pumpExpiresAtDate: Date?
@@ -152,6 +153,7 @@ extension Home {
             setupBattery()
             setupOrangeLinkBattery()
             setupReservoir()
+            setupInsulinTimeRemaining()
             setupAnnouncements()
             setupCurrentPumpTimezone()
             setupOverrideHistory()
@@ -619,6 +621,32 @@ extension Home {
             }
         }
 
+        private func setupInsulinTimeRemaining() {
+            refreshInsulinTimeRemaining()
+        }
+
+        /// Estimate hours-of-insulin-remaining from the last 24h of pump history and the current
+        /// reservoir. Updated whenever pump history or reservoir changes; the UI's timer tick
+        /// then counts the estimate down in real time.
+        func refreshInsulinTimeRemaining() {
+            let history = provider.pumpHistory(hours: 24)
+            let increment = Double(truncating: settingsManager.preferences.bolusIncrement as NSDecimalNumber)
+            let tdd = TotalDailyDose().totalDailyDose(history, increment: increment)
+            let totalUnits = tdd.bolus + tdd.basal
+            guard tdd.hours > 0,
+                  totalUnits > 0,
+                  let reservoir = provider.pumpReservoir(),
+                  reservoir > 0
+            else {
+                DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = nil }
+                return
+            }
+            let unitsPerHour = totalUnits / Decimal(tdd.hours)
+            let hoursRemaining = Double(truncating: (reservoir / unitsPerHour) as NSDecimalNumber)
+            let expiration = Date().addingTimeInterval(hoursRemaining * 3600)
+            DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = expiration }
+        }
+
         private func setupCurrentTempTarget() {
             tempTarget = provider.tempTarget()
         }
@@ -829,6 +857,7 @@ extension Home.StateModel:
         setupAnnouncements()
         setupIOB()
         setupActivity()
+        refreshInsulinTimeRemaining()
     }
 
     func pumpSettingsDidChange(_: PumpSettings) {
@@ -863,6 +892,7 @@ extension Home.StateModel:
 
     func pumpReservoirDidChange(_: Decimal) {
         setupReservoir()
+        refreshInsulinTimeRemaining()
     }
 
     func pumpTimeZoneDidChange(_: TimeZone) {

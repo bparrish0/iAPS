@@ -126,8 +126,8 @@ extension Home {
             storage.retrieve(OpenAPS.Monitor.battery, as: Battery.self)
         }
 
-        func orangeLinkBattery() -> OrangeLinkBatteryLog? {
-            storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: OrangeLinkBatteryLog.self)
+        func orangeLinkBattery() -> BatteryDischargeLog? {
+            storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: BatteryDischargeLog.self)
         }
 
         func pumpReservoir() -> Decimal? {

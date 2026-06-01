@@ -209,12 +209,23 @@ final class BaseDeviceDataManager: Injectable, DeviceDataManager {
     private func trackOrangeLinkVoltage(_ voltage: Double) {
         processQueue.async { [weak self] in
             guard let self = self else { return }
-            var log = self.storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: OrangeLinkBatteryLog.self)
-                ?? OrangeLinkBatteryLog()
-            OrangeLinkBatteryTracker.record(voltage: voltage, at: Date(), into: &log)
+            var log = self.storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: BatteryDischargeLog.self)
+                ?? BatteryDischargeLog()
+            BatteryDischargeTracker.record(value: voltage, at: Date(), into: &log, config: .orangeLink)
             self.storage.save(log, as: OpenAPS.Monitor.orangeLinkBattery)
             Foundation.NotificationCenter.default.post(name: .orangeLinkBatteryUpdated, object: nil)
         }
+    }
+
+    /// Record a pump battery voltage reading and return the current expiration estimate so the
+    /// caller can attach it to the Battery snapshot. Synchronous because pump-status updates
+    /// arrive serially on the pump-manager delegate queue.
+    private func trackPumpBatteryVoltage(_ voltage: Double) -> Date? {
+        var log = storage.retrieve(OpenAPS.Monitor.pumpBatteryLog, as: BatteryDischargeLog.self)
+            ?? BatteryDischargeLog()
+        BatteryDischargeTracker.record(value: voltage, at: Date(), into: &log, config: .pump)
+        storage.save(log, as: OpenAPS.Monitor.pumpBatteryLog)
+        return log.currentExpirationDate
     }
 
     var availablePumpManagers: [PumpManagerDescriptor] {
@@ -614,10 +625,11 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
         }
 
         let batteryPercent = Int((status.pumpBatteryChargeRemaining ?? 1) * 100)
-        let expirationDate = (pumpManager as? MinimedPumpManager)?.batteryExpirationDate
+        let pumpVoltage = (pumpManager as? MinimedPumpManager)?.batteryVoltage
+        let expirationDate: Date? = pumpVoltage.flatMap { trackPumpBatteryVoltage($0) }
         let battery = Battery(
             percent: batteryPercent,
-            voltage: nil,
+            voltage: pumpVoltage.map { Decimal($0) },
             string: batteryPercent >= 10 ? .normal : .low,
             display: pumpManager.status.pumpBatteryChargeRemaining != nil,
             batteryExpirationDate: expirationDate

@@ -694,6 +694,14 @@ extension Home {
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                                 .padding(.leading, 15)
                                 .padding(.bottom, 50)
+                                BatteryTimeRemainingView(
+                                    expirationDate: state.insulinExpirationDate,
+                                    label: "I",
+                                    labelColor: .insulin,
+                                    timerDate: $state.data.timerDate
+                                )
+                                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                                .padding(.top, 4)
                             }
                             if displayGlucose {
                                 glucoseView.frame(maxHeight: .infinity, alignment: .center).offset(y: -10)
