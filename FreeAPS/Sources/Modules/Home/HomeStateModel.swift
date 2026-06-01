@@ -627,29 +627,57 @@ extension Home {
             refreshInsulinTimeRemaining()
         }
 
-        /// Estimate hours-of-insulin-remaining from the recent rolling-24h TDD (the same value
-        /// shown elsewhere as "TDD yesterday") and the current reservoir. Averages the latest
-        /// few stored TDD records for smoothness so a single big-bolus day doesn't whipsaw the
-        /// estimate — or, when the user has tapped the I view to switch modes, uses just the
-        /// single most recent TDD record (useful when usage has suddenly shifted, e.g. vacation).
-        /// Updated whenever pump history or reservoir changes; the UI's timer tick then counts
-        /// the estimate down in real time.
+        /// Estimate hours-of-insulin-remaining from the rolling-24h TDD (the same value shown
+        /// elsewhere as "TDD yesterday") and the current reservoir. By default averages one
+        /// stored TDD value per calendar day across the last 10 days — multi-day smoothing so a
+        /// single big-bolus day doesn't whipsaw the estimate. When the user has tapped the I
+        /// view, uses just the single freshest TDD record (responsive when usage has suddenly
+        /// shifted, e.g. vacation). Updated whenever pump history or reservoir changes; the
+        /// UI's timer tick then counts the estimate down in real time.
         func refreshInsulinTimeRemaining() {
-            let tdds = CoreDataStorage().fetchTDD(interval: DateFilter().tenDays)
-            let limit = insulinEstimateUsesLatestTddOnly ? 1 : 7
-            let recent = tdds.prefix(limit).compactMap { $0.tdd?.decimalValue }.filter { $0 > 0 }
-            guard !recent.isEmpty,
+            let samples: [Decimal] = insulinEstimateUsesLatestTddOnly
+                ? latestStoredTDD().map { [$0] } ?? []
+                : recentDailyTDDSamples(limit: 10)
+            guard !samples.isEmpty,
                   let reservoir = provider.pumpReservoir(),
                   reservoir > 0
             else {
                 DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = nil }
                 return
             }
-            let avgDailyUnits = recent.reduce(0, +) / Decimal(recent.count)
+            let avgDailyUnits = samples.reduce(0, +) / Decimal(samples.count)
             let unitsPerHour = avgDailyUnits / 24
             let hoursRemaining = Double(truncating: (reservoir / unitsPerHour) as NSDecimalNumber)
             let expiration = Date().addingTimeInterval(hoursRemaining * 3600)
             DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = expiration }
+        }
+
+        private func latestStoredTDD() -> Decimal? {
+            let tdds = CoreDataStorage().fetchTDD(interval: DateFilter().tenDays)
+            guard let v = tdds.first?.tdd?.decimalValue, v > 0 else { return nil }
+            return v
+        }
+
+        /// Up to `limit` daily TDD samples, taking the freshest stored record from each distinct
+        /// calendar day. Loop saves a record every ~5 minutes, so naïvely taking the last N
+        /// records all comes from the past ~N×5 minutes — meaningless for cross-day smoothing.
+        private func recentDailyTDDSamples(limit: Int) -> [Decimal] {
+            let tdds = CoreDataStorage().fetchTDD(interval: DateFilter().tenDays)
+            let calendar = Calendar.current
+            var seenDays: Set<Date> = []
+            var result: [Decimal] = []
+            for record in tdds {
+                guard let ts = record.timestamp,
+                      let value = record.tdd?.decimalValue,
+                      value > 0
+                else { continue }
+                let day = calendar.startOfDay(for: ts)
+                if seenDays.insert(day).inserted {
+                    result.append(value)
+                    if result.count == limit { break }
+                }
+            }
+            return result
         }
 
         /// Toggle between rolling-7-record average (default, smoother) and single latest TDD
