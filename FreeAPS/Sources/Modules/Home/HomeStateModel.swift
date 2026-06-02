@@ -645,9 +645,16 @@ extension Home {
                 DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = nil }
                 return
             }
+            // Pump history events are concentration-adjusted before being saved (see
+            // PumpHistoryStorage), so the stored TDD is already in real insulin units (e.g.
+            // 85.7 U/day means 85.7 real units delivered). The raw reservoir from
+            // `pumpReservoir()` is in pump-volume units though, so multiply by concentration
+            // here to bring it into the same units before dividing.
+            let concentration = Decimal(CoreDataStorage().insulinConcentration().concentration)
+            let realReservoir = reservoir * concentration
             let avgDailyUnits = samples.reduce(0, +) / Decimal(samples.count)
             let unitsPerHour = avgDailyUnits / 24
-            let hoursRemaining = Double(truncating: (reservoir / unitsPerHour) as NSDecimalNumber)
+            let hoursRemaining = Double(truncating: (realReservoir / unitsPerHour) as NSDecimalNumber)
             let expiration = Date().addingTimeInterval(hoursRemaining * 3600)
             DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = expiration }
         }
