@@ -33,6 +33,8 @@ extension Home {
         @Published var tempRate: Decimal?
         @Published var battery: Battery?
         @Published var orangeLinkExpirationDate: Date?
+        @Published var batteryDetailKind: BatteryDeviceKind?
+        @Published var batteryDetailLog: BatteryDischargeLog?
         @Published var insulinExpirationDate: Date?
         @Published var insulinEstimateUsesLatestTddOnly: Bool = UserDefaults.standard
             .bool(forKey: "insulinEstimateUsesLatestTddOnly")
@@ -605,6 +607,74 @@ extension Home {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.battery = self.provider.pumpBattery()
+                if self.batteryDetailKind == .pump {
+                    self.batteryDetailLog = self.provider.batteryLog(for: .pump)
+                }
+            }
+        }
+
+        /// Open the battery-detail sheet for the given battery, loading its persisted log.
+        func presentBatteryDetail(_ kind: BatteryDeviceKind) {
+            batteryDetailLog = provider.batteryLog(for: kind)
+            batteryDetailKind = kind
+        }
+
+        /// Set (or clear, when `secondsRemaining` is nil) the user's time-remaining override for
+        /// one voltage level of a battery's discharge table.
+        func setBatteryLevelOverride(kind: BatteryDeviceKind, level: Int, secondsRemaining: TimeInterval?) {
+            var log = provider.batteryLog(for: kind) ?? BatteryDischargeLog()
+            var overrides = log.levelOverrides ?? []
+            overrides.removeAll { $0.level == level }
+            if let secondsRemaining = secondsRemaining {
+                overrides.append(BatteryLevelRemaining(level: level, secondsRemaining: secondsRemaining))
+            }
+            log.levelOverrides = overrides
+            finalizeBatteryLogEdit(kind: kind, log: log)
+        }
+
+        /// Delete one completed discharge cycle from a battery's history (e.g. an outlier
+        /// session), so it stops contributing to the learned average.
+        func deleteBatteryCycle(kind: BatteryDeviceKind, at index: Int) {
+            guard var log = provider.batteryLog(for: kind),
+                  log.completedCycles.indices.contains(index)
+            else { return }
+            log.completedCycles.remove(at: index)
+            finalizeBatteryLogEdit(kind: kind, log: log)
+        }
+
+        /// Persist an edited battery log, recompute its expiration estimate from the last known
+        /// reading, and push the fresh estimate into the header display.
+        private func finalizeBatteryLogEdit(kind: BatteryDeviceKind, log: BatteryDischargeLog) {
+            var log = log
+            if let value = log.lastValue, let date = log.lastValueDate {
+                log.currentExpirationDate = BatteryDischargeTracker.estimatedExpiration(
+                    at: value,
+                    from: date,
+                    log: log,
+                    config: kind.config
+                )
+            }
+            provider.saveBatteryLog(log, for: kind)
+            batteryDetailLog = log
+
+            switch kind {
+            case .orangeLink:
+                orangeLinkExpirationDate = log.currentExpirationDate
+            case .pump:
+                // The header reads the pump expiration off the Battery snapshot, which is only
+                // rewritten on the next pump-status update — refresh it now so the edit shows
+                // immediately.
+                if let current = provider.pumpBattery() {
+                    let updated = Battery(
+                        percent: current.percent,
+                        voltage: current.voltage,
+                        string: current.string,
+                        display: current.display,
+                        batteryExpirationDate: log.currentExpirationDate
+                    )
+                    provider.savePumpBattery(updated)
+                    battery = updated
+                }
             }
         }
 
@@ -620,6 +690,9 @@ extension Home {
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 self.orangeLinkExpirationDate = self.provider.orangeLinkBattery()?.currentExpirationDate
+                if self.batteryDetailKind == .orangeLink {
+                    self.batteryDetailLog = self.provider.orangeLinkBattery()
+                }
             }
         }
 

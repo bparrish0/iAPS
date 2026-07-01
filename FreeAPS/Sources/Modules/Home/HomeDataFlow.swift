@@ -17,7 +17,10 @@ protocol HomeProvider: Provider {
     func tempTargets(hours: Int) -> [TempTarget]
     func carbs(hours: Int) -> [CarbsEntry]
     func pumpBattery() -> Battery?
+    func savePumpBattery(_ battery: Battery)
     func orangeLinkBattery() -> BatteryDischargeLog?
+    func batteryLog(for kind: BatteryDeviceKind) -> BatteryDischargeLog?
+    func saveBatteryLog(_ log: BatteryDischargeLog, for kind: BatteryDeviceKind)
     func pumpReservoir() -> Decimal?
     func tempTarget() -> TempTarget?
     func announcement(_ hours: Int) -> [Announcement]

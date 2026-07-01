@@ -682,18 +682,24 @@ extension Home {
                                     labelColor: .purple,
                                     timerDate: $state.data.timerDate
                                 )
+                                .padding(6)
+                                .contentShape(Rectangle())
+                                .onTapGesture { state.presentBatteryDetail(.pump) }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-                                .padding(.trailing, 15)
-                                .padding(.bottom, 50)
+                                .padding(.trailing, 9)
+                                .padding(.bottom, 44)
                                 BatteryTimeRemainingView(
                                     expirationDate: state.orangeLinkExpirationDate,
                                     label: "O",
                                     labelColor: .orange,
                                     timerDate: $state.data.timerDate
                                 )
+                                .padding(6)
+                                .contentShape(Rectangle())
+                                .onTapGesture { state.presentBatteryDetail(.orangeLink) }
                                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-                                .padding(.leading, 15)
-                                .padding(.bottom, 50)
+                                .padding(.leading, 9)
+                                .padding(.bottom, 44)
                                 BatteryTimeRemainingView(
                                     expirationDate: state.insulinExpirationDate,
                                     label: "I",
@@ -953,6 +959,10 @@ extension Home {
             }
             .sheet(isPresented: $displayDynamicHistory) {
                 DynamicHistoryView(units: state.data.units)
+                    .environment(\.colorScheme, colorScheme)
+            }
+            .sheet(item: $state.batteryDetailKind) { kind in
+                BatteryDetailView(kind: kind, state: state)
                     .environment(\.colorScheme, colorScheme)
             }
             .popup(isPresented: state.isStatusPopupPresented, alignment: .bottom, direction: .bottom) {

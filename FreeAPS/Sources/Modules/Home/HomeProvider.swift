@@ -130,6 +130,18 @@ extension Home {
             storage.retrieve(OpenAPS.Monitor.orangeLinkBattery, as: BatteryDischargeLog.self)
         }
 
+        func savePumpBattery(_ battery: Battery) {
+            storage.save(battery, as: OpenAPS.Monitor.battery)
+        }
+
+        func batteryLog(for kind: BatteryDeviceKind) -> BatteryDischargeLog? {
+            storage.retrieve(kind.storageFile, as: BatteryDischargeLog.self)
+        }
+
+        func saveBatteryLog(_ log: BatteryDischargeLog, for kind: BatteryDeviceKind) {
+            storage.save(log, as: kind.storageFile)
+        }
+
         func pumpReservoir() -> Decimal? {
             storage.retrieve(OpenAPS.Monitor.reservoir, as: Decimal.self)
         }

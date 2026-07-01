@@ -13,6 +13,10 @@ struct BatteryDischargeConfig: Sendable {
     let defaultLifetime: TimeInterval
     /// Cap on retained completed cycles, so the rolling average stays bounded.
     let maxStoredCycles: Int
+    /// Voltage of a fresh cell — top of the default (unlearned) discharge table.
+    let defaultFreshValue: Double
+    /// Voltage where the cell is considered spent — bottom of the default discharge table.
+    let defaultDepletedValue: Double
 
     /// OrangeLink/RileyLink CR2032-class cell: ~3.4V fresh, drops into the 2.x range when dying,
     /// ~29-day default lifetime.
@@ -21,7 +25,9 @@ struct BatteryDischargeConfig: Sendable {
         replacementHighThreshold: 3.2,
         levelGranularity: 0.1,
         defaultLifetime: 29 * 86400,
-        maxStoredCycles: 10
+        maxStoredCycles: 10,
+        defaultFreshValue: 3.4,
+        defaultDepletedValue: 2.8
     )
 
     /// Medtronic AA pump battery: fresh ≥1.5V, dying ~1.0V, ~15-day default lifetime. Same
@@ -31,8 +37,48 @@ struct BatteryDischargeConfig: Sendable {
         replacementHighThreshold: 1.55,
         levelGranularity: 0.05,
         defaultLifetime: 15 * 86400,
-        maxStoredCycles: 10
+        maxStoredCycles: 10,
+        defaultFreshValue: 1.55,
+        defaultDepletedValue: 1.1
     )
+}
+
+/// Which physical battery a discharge log belongs to. Carries the per-device config and
+/// storage location so UI code can address either battery generically.
+enum BatteryDeviceKind: String, Identifiable, CaseIterable {
+    case pump
+    case orangeLink
+
+    var id: String { rawValue }
+
+    var config: BatteryDischargeConfig {
+        switch self {
+        case .pump: return .pump
+        case .orangeLink: return .orangeLink
+        }
+    }
+
+    var storageFile: String {
+        switch self {
+        case .pump: return OpenAPS.Monitor.pumpBatteryLog
+        case .orangeLink: return OpenAPS.Monitor.orangeLinkBattery
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .pump: return NSLocalizedString("Pump Battery", comment: "Battery detail title")
+        case .orangeLink: return NSLocalizedString("OrangeLink Battery", comment: "Battery detail title")
+        }
+    }
+
+    /// Decimal places that make sense for this battery's voltage granularity.
+    var voltageFractionDigits: Int {
+        switch self {
+        case .pump: return 2
+        case .orangeLink: return 1
+        }
+    }
 }
 
 struct BatteryLevelTime: JSON, Equatable {
@@ -48,6 +94,17 @@ struct BatteryLevelOffset: JSON, Equatable {
 struct BatteryDischargeCycle: JSON, Equatable {
     let totalLifetime: TimeInterval
     let levelOffsets: [BatteryLevelOffset]
+    /// When this battery was installed. Optional because cycles recorded before this field
+    /// existed have no date.
+    var startDate: Date?
+}
+
+/// A user-editable estimate: "when the battery first reads at `level`, it has
+/// `secondsRemaining` left". Stored per-level in the log and applied on top of the learned
+/// (or default) discharge curve.
+struct BatteryLevelRemaining: JSON, Equatable {
+    let level: Int
+    var secondsRemaining: TimeInterval
 }
 
 /// Persisted state for a single battery's discharge tracking, kept in a JSON file under
@@ -64,6 +121,9 @@ struct BatteryDischargeLog: JSON, Equatable {
     var currentLevelTimes: [BatteryLevelTime]
     var completedCycles: [BatteryDischargeCycle]
     var currentExpirationDate: Date?
+    /// User edits to the per-level time-remaining table. Optional so logs persisted before
+    /// this field existed still decode.
+    var levelOverrides: [BatteryLevelRemaining]?
 
     init(
         replacementDate: Date? = nil,
@@ -72,7 +132,8 @@ struct BatteryDischargeLog: JSON, Equatable {
         lastValueDate: Date? = nil,
         currentLevelTimes: [BatteryLevelTime] = [],
         completedCycles: [BatteryDischargeCycle] = [],
-        currentExpirationDate: Date? = nil
+        currentExpirationDate: Date? = nil,
+        levelOverrides: [BatteryLevelRemaining]? = nil
     ) {
         self.replacementDate = replacementDate
         self.cycleIsLearnable = cycleIsLearnable
@@ -81,6 +142,7 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.currentLevelTimes = currentLevelTimes
         self.completedCycles = completedCycles
         self.currentExpirationDate = currentExpirationDate
+        self.levelOverrides = levelOverrides
     }
 }
 
@@ -120,7 +182,8 @@ enum BatteryDischargeTracker {
                     let offsets = log.currentLevelTimes.map {
                         BatteryLevelOffset(level: $0.level, secondsFromReplacement: $0.date.timeIntervalSince(start))
                     }
-                    log.completedCycles.append(BatteryDischargeCycle(totalLifetime: lifetime, levelOffsets: offsets))
+                    log.completedCycles
+                        .append(BatteryDischargeCycle(totalLifetime: lifetime, levelOffsets: offsets, startDate: start))
                     if log.completedCycles.count > config.maxStoredCycles {
                         log.completedCycles.removeFirst(log.completedCycles.count - config.maxStoredCycles)
                     }
@@ -165,7 +228,8 @@ enum BatteryDischargeTracker {
         return (lifetime, offsets)
     }
 
-    /// Expiration estimate: learned curve when we have completed cycles, otherwise
+    /// Expiration estimate. Uses the effective per-level time-remaining table (learned curve
+    /// merged with any user edits) when one exists; otherwise falls back to
     /// `replacementDate + defaultLifetime` (which can produce a negative remaining-time once
     /// elapsed, surfacing as e.g. "P-1d1h" in the UI).
     static func estimatedExpiration(
@@ -174,13 +238,9 @@ enum BatteryDischargeTracker {
         log: BatteryDischargeLog,
         config: BatteryDischargeConfig
     ) -> Date? {
-        if let profile = averagedProfile(log.completedCycles) {
-            let elapsed = interpolatedOffset(
-                forValue: value,
-                offsets: profile.offsets,
-                granularity: config.levelGranularity
-            )
-            return date.addingTimeInterval(profile.lifetime - elapsed)
+        if let table = effectiveRemainingTable(log: log, config: config) {
+            let remaining = interpolated(forValue: value, table: table, granularity: config.levelGranularity)
+            return date.addingTimeInterval(remaining)
         }
         if let start = log.replacementDate {
             return start.addingTimeInterval(config.defaultLifetime)
@@ -188,29 +248,100 @@ enum BatteryDischargeTracker {
         return nil
     }
 
-    /// Elapsed-time-from-replacement at a given reading, linearly interpolating between the two
-    /// nearest learned levels (offset decreases as the reading rises). Clamps outside the
-    /// learned range.
-    static func interpolatedOffset(
+    /// The per-level time-remaining table currently driving the estimate: the learned averaged
+    /// curve (converted from elapsed-offsets to time-remaining) with any user overrides applied.
+    /// When nothing has been learned yet but the user has made edits, the edits sit on top of
+    /// the default linear table so interpolation still has endpoints. Returns `nil` when
+    /// there's nothing learned and nothing edited — the caller should use the plain
+    /// default-lifetime countdown in that case.
+    static func effectiveRemainingTable(
+        log: BatteryDischargeLog,
+        config: BatteryDischargeConfig
+    ) -> [Int: TimeInterval]? {
+        var table: [Int: TimeInterval]
+        if let learned = averagedProfile(log.completedCycles) {
+            table = learned.offsets.mapValues { max(0, learned.lifetime - $0) }
+        } else if !(log.levelOverrides ?? []).isEmpty {
+            table = defaultRemainingTable(config)
+        } else {
+            return nil
+        }
+        for override in log.levelOverrides ?? [] {
+            table[override.level] = override.secondsRemaining
+        }
+        return table
+    }
+
+    /// Linear default discharge table: fresh voltage → full default lifetime, depleted
+    /// voltage → zero. Used as the editable seed before any full cycle has been learned.
+    static func defaultRemainingTable(_ config: BatteryDischargeConfig) -> [Int: TimeInterval] {
+        let fresh = level(for: config.defaultFreshValue, config: config)
+        let depleted = level(for: config.defaultDepletedValue, config: config)
+        guard fresh > depleted else { return [fresh: config.defaultLifetime] }
+        var table: [Int: TimeInterval] = [:]
+        for lvl in depleted ... fresh {
+            let fraction = Double(lvl - depleted) / Double(fresh - depleted)
+            table[lvl] = config.defaultLifetime * fraction
+        }
+        return table
+    }
+
+    /// Rows for the battery-detail screen: every level from the default range plus any learned
+    /// or overridden levels, highest voltage first, each with the time-remaining the estimator
+    /// would use at that level.
+    static func displayProfile(
+        log: BatteryDischargeLog,
+        config: BatteryDischargeConfig
+    ) -> [BatteryLevelEstimate] {
+        let table = effectiveRemainingTable(log: log, config: config) ?? defaultRemainingTable(config)
+        let overrideLevels = Set((log.levelOverrides ?? []).map(\.level))
+        let levels = Set(table.keys).union(defaultRemainingTable(config).keys).sorted(by: >)
+        return levels.map { lvl in
+            let remaining = table[lvl] ?? interpolated(
+                forValue: Double(lvl) * config.levelGranularity,
+                table: table,
+                granularity: config.levelGranularity
+            )
+            return BatteryLevelEstimate(
+                level: lvl,
+                voltage: Double(lvl) * config.levelGranularity,
+                secondsRemaining: remaining,
+                isOverridden: overrideLevels.contains(lvl)
+            )
+        }
+    }
+
+    /// Value at a given reading, linearly interpolating between the two nearest table levels.
+    /// Clamps outside the table's range.
+    static func interpolated(
         forValue value: Double,
-        offsets: [Int: TimeInterval],
+        table: [Int: TimeInterval],
         granularity: Double
     ) -> TimeInterval {
-        guard !offsets.isEmpty else { return 0 }
-        let levels = offsets.keys.sorted()
+        guard !table.isEmpty else { return 0 }
+        let levels = table.keys.sorted()
         let scaled = value / granularity
-        if let highest = levels.last, scaled >= Double(highest) { return offsets[highest] ?? 0 }
-        if let lowest = levels.first, scaled <= Double(lowest) { return offsets[lowest] ?? 0 }
+        if let highest = levels.last, scaled >= Double(highest) { return table[highest] ?? 0 }
+        if let lowest = levels.first, scaled <= Double(lowest) { return table[lowest] ?? 0 }
         var lower = levels.first!
         var upper = levels.last!
         for lvl in levels {
             if Double(lvl) <= scaled { lower = lvl }
             if Double(lvl) >= scaled { upper = lvl; break }
         }
-        guard lower != upper, let low = offsets[lower], let high = offsets[upper] else {
-            return offsets[lower] ?? 0
+        guard lower != upper, let low = table[lower], let high = table[upper] else {
+            return table[lower] ?? 0
         }
         let fraction = (scaled - Double(lower)) / Double(upper - lower)
         return low + (high - low) * fraction
     }
+}
+
+/// One row of the battery-detail discharge table, ready for display.
+struct BatteryLevelEstimate: Identifiable {
+    var id: Int { level }
+    let level: Int
+    let voltage: Double
+    let secondsRemaining: TimeInterval
+    let isOverridden: Bool
 }
