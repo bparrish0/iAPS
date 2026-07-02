@@ -107,6 +107,15 @@ struct BatteryLevelRemaining: JSON, Equatable {
     var secondsRemaining: TimeInterval
 }
 
+/// One raw voltage observation, kept whenever the reading changes so debug reports can show
+/// the full measured history. `kind` is "first" for the first-ever reading, "replacement"
+/// when a fresh-battery jump was detected, nil for an ordinary change.
+struct BatteryVoltageEvent: JSON, Equatable {
+    let value: Double
+    let date: Date
+    let kind: String?
+}
+
 /// Persisted state for a single battery's discharge tracking, kept in a JSON file under
 /// `monitor/` so it survives reboots.
 struct BatteryDischargeLog: JSON, Equatable {
@@ -124,6 +133,9 @@ struct BatteryDischargeLog: JSON, Equatable {
     /// User edits to the per-level time-remaining table. Optional so logs persisted before
     /// this field existed still decode.
     var levelOverrides: [BatteryLevelRemaining]?
+    /// Raw reading history (voltage changes, replacement detections), capped, for debugging.
+    /// Optional so logs persisted before this field existed still decode.
+    var readingHistory: [BatteryVoltageEvent]?
 
     init(
         replacementDate: Date? = nil,
@@ -133,7 +145,8 @@ struct BatteryDischargeLog: JSON, Equatable {
         currentLevelTimes: [BatteryLevelTime] = [],
         completedCycles: [BatteryDischargeCycle] = [],
         currentExpirationDate: Date? = nil,
-        levelOverrides: [BatteryLevelRemaining]? = nil
+        levelOverrides: [BatteryLevelRemaining]? = nil,
+        readingHistory: [BatteryVoltageEvent]? = nil
     ) {
         self.replacementDate = replacementDate
         self.cycleIsLearnable = cycleIsLearnable
@@ -143,6 +156,7 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.completedCycles = completedCycles
         self.currentExpirationDate = currentExpirationDate
         self.levelOverrides = levelOverrides
+        self.readingHistory = readingHistory
     }
 }
 
@@ -150,6 +164,9 @@ struct BatteryDischargeLog: JSON, Equatable {
 /// Records a new reading, detects fresh-battery replacements, finalizes learnable cycles, and
 /// recomputes the running expiration estimate.
 enum BatteryDischargeTracker {
+    /// Cap on the raw reading-history debug log.
+    static let maxReadingHistory = 1000
+
     static func level(for value: Double, config: BatteryDischargeConfig) -> Int {
         Int((value / config.levelGranularity).rounded(.down))
     }
@@ -169,6 +186,18 @@ enum BatteryDischargeTracker {
 
         let priorWasLow = (log.lastValue ?? .greatestFiniteMagnitude) < config.replacementLowThreshold
         let isReplacement = priorWasLow && value >= config.replacementHighThreshold
+
+        // Debug history: keep a timestamped event for the first-ever reading, every detected
+        // replacement, and every reading whose value differs from the previous one.
+        if log.lastValue == nil || isReplacement || value != log.lastValue {
+            let kind: String? = log.lastValue == nil ? "first" : (isReplacement ? "replacement" : nil)
+            var history = log.readingHistory ?? []
+            history.append(BatteryVoltageEvent(value: value, date: date, kind: kind))
+            if history.count > maxReadingHistory {
+                history.removeFirst(history.count - maxReadingHistory)
+            }
+            log.readingHistory = history
+        }
 
         if isReplacement {
             // Finalize the prior cycle if it began from a detected replacement (not synthetic).

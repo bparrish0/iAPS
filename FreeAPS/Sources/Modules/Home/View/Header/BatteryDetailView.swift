@@ -10,6 +10,14 @@ extension Home {
 
         @State private var editingRow: BatteryLevelEstimate?
 
+        private enum DebugEmailStatus: Equatable {
+            case idle
+            case sending
+            case result(String)
+        }
+
+        @State private var debugEmailStatus: DebugEmailStatus = .idle
+
         private var log: BatteryDischargeLog {
             state.batteryDetailLog ?? BatteryDischargeLog()
         }
@@ -30,6 +38,7 @@ extension Home {
                     currentSection
                     profileSection
                     historySection
+                    debugSection
                 }
                 .navigationTitle(kind.title)
                 .navigationBarTitleDisplayMode(.inline)
@@ -102,7 +111,9 @@ extension Home {
         private var estimateSource: String {
             var source: String
             if log.completedCycles.isEmpty {
-                source = NSLocalizedString("Default curve", comment: "Battery estimate source")
+                source = log.cycleIsLearnable
+                    ? NSLocalizedString("Default curve (learning this session)", comment: "Battery estimate source")
+                    : NSLocalizedString("Default curve", comment: "Battery estimate source")
             } else {
                 source = String(
                     format: NSLocalizedString("Learned from %d session(s)", comment: "Battery estimate source"),
@@ -170,6 +181,37 @@ extension Home {
                         }
                     }
                 }
+            }
+        }
+
+        private var debugSection: some View {
+            Section(
+                header: Text("Debugging"),
+                footer: Text(
+                    "Emails the full tracking logs for both batteries — sessions, per-level timestamps, raw voltage readings, and replacement detections — to the developer."
+                )
+            ) {
+                Button {
+                    debugEmailStatus = .sending
+                    Task {
+                        let result = await state.sendBatteryDebugEmail(for: kind)
+                        debugEmailStatus = .result(result)
+                    }
+                } label: {
+                    HStack {
+                        Text("Send Debug Email")
+                        Spacer()
+                        switch debugEmailStatus {
+                        case .idle:
+                            EmptyView()
+                        case .sending:
+                            ProgressView()
+                        case let .result(text):
+                            Text(text).foregroundStyle(.secondary)
+                        }
+                    }
+                }
+                .disabled(debugEmailStatus == .sending)
             }
         }
 

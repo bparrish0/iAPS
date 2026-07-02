@@ -642,6 +642,27 @@ extension Home {
             finalizeBatteryLogEdit(kind: kind, log: log)
         }
 
+        /// Email a full battery-tracking debug report (both batteries) to the developer.
+        /// Returns a short status string for display next to the button.
+        func sendBatteryDebugEmail(for kind: BatteryDeviceKind) async -> String {
+            let logs = BatteryDeviceKind.allCases.map { (kind: $0, log: provider.batteryLog(for: $0)) }
+            let report = BatteryDebugReport.compose(
+                focus: kind,
+                logs: logs,
+                battery: provider.pumpBattery(),
+                reservoir: provider.pumpReservoir()
+            )
+            do {
+                try await BatteryDebugMailer.send(subject: report.subject, body: report.body)
+                return NSLocalizedString("Sent", comment: "Debug email status")
+            } catch {
+                return String(
+                    format: NSLocalizedString("Failed: %@", comment: "Debug email status"),
+                    error.localizedDescription
+                )
+            }
+        }
+
         /// Persist an edited battery log, recompute its expiration estimate from the last known
         /// reading, and push the fresh estimate into the header display.
         private func finalizeBatteryLogEdit(kind: BatteryDeviceKind, log: BatteryDischargeLog) {

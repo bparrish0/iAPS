@@ -88,6 +88,10 @@
 	<string>$(COPYRIGHT_NOTICE)</string>
 	<key>NSSupportsLiveActivities</key>
 	<true/>
+	<key>SMTPUsername</key>
+	<string>$(SMTP_USERNAME)</string>
+	<key>SMTPPassword</key>
+	<string>$(SMTP_PASSWORD)</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

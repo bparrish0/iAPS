@@ -15,6 +15,11 @@ AUTHENTICATE = true
 // iAPS URL in other apps
 APP_URL_SCHEME = freeaps-x
 
+// SMTP account for battery debug emails. Left blank here on purpose — CI injects the real
+// values from GitHub secrets via ConfigOverride.xcconfig so no credentials live in the repo.
+SMTP_USERNAME =
+SMTP_PASSWORD =
+
 // Include file for overriding configuration
 #include? "ConfigOverride.xcconfig"
 //#include? "../../ConfigOverride.xcconfig"

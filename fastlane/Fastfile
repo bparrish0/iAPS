@@ -48,10 +48,21 @@ if #{APP_IDENTIFIER} != "ru.artpancreas.#{TEAMID}.FreeAPS"
   File.write('../ConfigOverride.xcconfig', "BUNDLE_IDENTIFIER = #{APP_IDENTIFIER}\n", mode: 'a')
 end
 
+# SMTP account for battery debug emails, injected from GitHub secrets so no credentials live
+# in the repo. Note: xcconfig treats "//" as a comment start, so the password must not
+# contain two consecutive slashes.
+if ENV['SMTP_USERNAME'] && !ENV['SMTP_USERNAME'].empty?
+  File.write('../ConfigOverride.xcconfig', "SMTP_USERNAME = #{ENV['SMTP_USERNAME']}\n", mode: 'a')
+end
+if ENV['SMTP_PASSWORD'] && !ENV['SMTP_PASSWORD'].empty?
+  File.write('../ConfigOverride.xcconfig', "SMTP_PASSWORD = #{ENV['SMTP_PASSWORD']}\n", mode: 'a')
+end
+
 if File.exist?('../ConfigOverride.xcconfig')
   contents = File.read('../ConfigOverride.xcconfig')
+  redacted = contents.lines.map { |l| l.start_with?('SMTP_') ? "#{l.split(' = ').first} = <redacted>\n" : l }.join
   puts "=== File Contents: ../ConfigOverride.xcconfig ==="
-  puts contents
+  puts redacted
   puts "====================="
 end
 
