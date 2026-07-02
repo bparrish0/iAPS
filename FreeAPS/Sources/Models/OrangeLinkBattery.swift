@@ -136,6 +136,12 @@ struct BatteryDischargeLog: JSON, Equatable {
     /// Raw reading history (voltage changes, replacement detections), capped, for debugging.
     /// Optional so logs persisted before this field existed still decode.
     var readingHistory: [BatteryVoltageEvent]?
+    /// When the current voltage value was first seen (i.e. the moment of the last voltage
+    /// change). The expiration estimate is anchored here rather than at the latest reading,
+    /// so repeated readings at the same voltage don't keep pushing the estimate forward —
+    /// without this the displayed time-remaining would sit pinned for the entire (sometimes
+    /// days-long) span between voltage steps. Optional for backward compatibility.
+    var currentValueSince: Date?
 
     init(
         replacementDate: Date? = nil,
@@ -146,7 +152,8 @@ struct BatteryDischargeLog: JSON, Equatable {
         completedCycles: [BatteryDischargeCycle] = [],
         currentExpirationDate: Date? = nil,
         levelOverrides: [BatteryLevelRemaining]? = nil,
-        readingHistory: [BatteryVoltageEvent]? = nil
+        readingHistory: [BatteryVoltageEvent]? = nil,
+        currentValueSince: Date? = nil
     ) {
         self.replacementDate = replacementDate
         self.cycleIsLearnable = cycleIsLearnable
@@ -157,6 +164,7 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.currentExpirationDate = currentExpirationDate
         self.levelOverrides = levelOverrides
         self.readingHistory = readingHistory
+        self.currentValueSince = currentValueSince
     }
 }
 
@@ -181,15 +189,25 @@ enum BatteryDischargeTracker {
         defer {
             log.lastValue = value
             log.lastValueDate = date
-            log.currentExpirationDate = estimatedExpiration(at: value, from: date, log: log, config: config)
+            // Anchor the estimate at the last voltage *change*, not this reading: repeated
+            // same-voltage readings must not push the expiration forward, or the displayed
+            // countdown stays pinned for the whole span between voltage steps.
+            log.currentExpirationDate = estimatedExpiration(
+                at: value,
+                from: log.currentValueSince ?? date,
+                log: log,
+                config: config
+            )
         }
 
         let priorWasLow = (log.lastValue ?? .greatestFiniteMagnitude) < config.replacementLowThreshold
         let isReplacement = priorWasLow && value >= config.replacementHighThreshold
 
         // Debug history: keep a timestamped event for the first-ever reading, every detected
-        // replacement, and every reading whose value differs from the previous one.
+        // replacement, and every reading whose value differs from the previous one. The same
+        // condition marks a voltage change, which re-anchors the countdown.
         if log.lastValue == nil || isReplacement || value != log.lastValue {
+            log.currentValueSince = date
             let kind: String? = log.lastValue == nil ? "first" : (isReplacement ? "replacement" : nil)
             var history = log.readingHistory ?? []
             history.append(BatteryVoltageEvent(value: value, date: date, kind: kind))

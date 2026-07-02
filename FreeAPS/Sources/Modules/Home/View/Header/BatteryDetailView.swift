@@ -82,6 +82,13 @@ extension Home {
                         Text(relativeString(lastDate)).foregroundStyle(.secondary)
                     }
                 }
+                if let since = log.currentValueSince {
+                    HStack {
+                        Text("At this voltage since")
+                        Spacer()
+                        Text(relativeString(since)).foregroundStyle(.secondary)
+                    }
+                }
                 if let replaced = log.replacementDate {
                     HStack {
                         Text(log.cycleIsLearnable ? "Installed" : "Tracking since")

@@ -249,6 +249,7 @@ enum BatteryDebugReport {
           replacementDate:      \(log.replacementDate.map { dateFormatter.string(from: $0) } ?? "nil")
           cycleIsLearnable:     \(log.cycleIsLearnable) \(log.cycleIsLearnable ? "(current session started at a detected replacement; will become a learned cycle at the NEXT replacement)" : "(synthetic first session — no replacement jump has been detected yet)")
           lastValue:            \(log.lastValue.map { voltage($0, kind) } ?? "nil") at \(log.lastValueDate.map { dateFormatter.string(from: $0) } ?? "nil")
+          currentValueSince:    \(log.currentValueSince.map { dateFormatter.string(from: $0) } ?? "nil (no voltage change seen since this field was added)")
           currentExpiration:    \(log.currentExpirationDate.map { dateFormatter.string(from: $0) } ?? "nil")
           completedCycles:      \(log.completedCycles.count)
           levelOverrides:       \(log.levelOverrides?.count ?? 0)

@@ -667,7 +667,7 @@ extension Home {
         /// reading, and push the fresh estimate into the header display.
         private func finalizeBatteryLogEdit(kind: BatteryDeviceKind, log: BatteryDischargeLog) {
             var log = log
-            if let value = log.lastValue, let date = log.lastValueDate {
+            if let value = log.lastValue, let date = log.currentValueSince ?? log.lastValueDate {
                 log.currentExpirationDate = BatteryDischargeTracker.estimatedExpiration(
                     at: value,
                     from: date,
