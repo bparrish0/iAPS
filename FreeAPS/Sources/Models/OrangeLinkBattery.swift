@@ -136,11 +136,10 @@ struct BatteryDischargeLog: JSON, Equatable {
     /// Raw reading history (voltage changes, replacement detections), capped, for debugging.
     /// Optional so logs persisted before this field existed still decode.
     var readingHistory: [BatteryVoltageEvent]?
-    /// When the current voltage value was first seen (i.e. the moment of the last voltage
-    /// change). The expiration estimate is anchored here rather than at the latest reading,
-    /// so repeated readings at the same voltage don't keep pushing the estimate forward —
-    /// without this the displayed time-remaining would sit pinned for the entire (sometimes
-    /// days-long) span between voltage steps. Optional for backward compatibility.
+    /// When the current voltage value was first seen (i.e. the moment of the last raw voltage
+    /// change). Display/debug info only — the expiration estimate anchors on the lowest
+    /// level's first-seen time instead, because raw values bounce with measurement noise.
+    /// Optional for backward compatibility.
     var currentValueSince: Date?
 
     init(
@@ -189,15 +188,9 @@ enum BatteryDischargeTracker {
         defer {
             log.lastValue = value
             log.lastValueDate = date
-            // Anchor the estimate at the last voltage *change*, not this reading: repeated
-            // same-voltage readings must not push the expiration forward, or the displayed
-            // countdown stays pinned for the whole span between voltage steps.
-            log.currentExpirationDate = estimatedExpiration(
-                at: value,
-                from: log.currentValueSince ?? date,
-                log: log,
-                config: config
-            )
+            // The estimate anchors itself on the lowest level's first-seen time inside
+            // `estimatedExpiration`; the value/date here only serve as a fallback anchor.
+            log.currentExpirationDate = estimatedExpiration(at: value, from: date, log: log, config: config)
         }
 
         let priorWasLow = (log.lastValue ?? .greatestFiniteMagnitude) < config.replacementLowThreshold
@@ -279,6 +272,15 @@ enum BatteryDischargeTracker {
     /// merged with any user edits) when one exists; otherwise falls back to
     /// `replacementDate + defaultLifetime` (which can produce a negative remaining-time once
     /// elapsed, surfacing as e.g. "P-1d1h" in the UI).
+    ///
+    /// Anchored at the *lowest voltage level reached this cycle* (its first-seen time), not at
+    /// the latest reading or the last raw voltage change: readings bounce by ±0.01–0.02 V
+    /// between polls, so any anchor tied to raw value changes gets reset constantly and the
+    /// displayed countdown never advances. The lowest-level-first-seen anchor is monotonic
+    /// under noise and uses the exact same "first time the reading dipped into this band"
+    /// semantics as the learned per-level offsets, so anchor and curve stay comparable. The
+    /// expiration is therefore a fixed date between level transitions (a true countdown) and
+    /// re-syncs to the learned pace each time a new level is first reached.
     static func estimatedExpiration(
         at value: Double,
         from date: Date,
@@ -286,8 +288,15 @@ enum BatteryDischargeTracker {
         config: BatteryDischargeConfig
     ) -> Date? {
         if let table = effectiveRemainingTable(log: log, config: config) {
-            let remaining = interpolated(forValue: value, table: table, granularity: config.levelGranularity)
-            return date.addingTimeInterval(remaining)
+            let anchor = log.currentLevelTimes.min { $0.level < $1.level }
+            let anchorLevel = anchor?.level ?? level(for: value, config: config)
+            let anchorDate = anchor?.date ?? date
+            let remaining = table[anchorLevel] ?? interpolated(
+                forValue: Double(anchorLevel) * config.levelGranularity,
+                table: table,
+                granularity: config.levelGranularity
+            )
+            return anchorDate.addingTimeInterval(remaining)
         }
         if let start = log.replacementDate {
             return start.addingTimeInterval(config.defaultLifetime)
