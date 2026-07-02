@@ -68,7 +68,10 @@ jobs:
   build:
     name: Build
     needs: [check_certs,check_latest_from_upstream]
-    runs-on: macos-latest
+    # Pinned: macos-latest is migrating to macos-26, whose image doesn't have the iOS
+    # platform installed for Xcode 26.1.1 ("iOS 26.1 is not installed"), so builds fail
+    # depending on which image the run lands on. Re-evaluate when macos-26 stabilizes.
+    runs-on: macos-15
     permissions:
       contents: write
     steps:
