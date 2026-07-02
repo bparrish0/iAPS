@@ -10,6 +10,21 @@
 #     https://docs.fastlane.tools/plugins/available-plugins
 #
 
+# fastlane/fastlane#30061 (merged into the Artificial-Pancreas fork on 2026-06-27) removed
+# AltoolTransporterExecutor's file_upload_option override, so altool gets iTMSTransporter's
+# "-assetFile" flag — which altool doesn't understand — and the TestFlight upload dies with
+# "Expected file path argument is missing, --file. (21)". Restore the altool-specific "-f"
+# flag until the regression is fixed upstream, then drop this along with the Gemfile pin.
+if defined?(FastlaneCore::AltoolTransporterExecutor)
+  class FastlaneCore::AltoolTransporterExecutor
+    private
+
+    def file_upload_option(source)
+      "-f #{source.shellescape}"
+    end
+  end
+end
+
 default_platform(:ios)
 
 TEAMID = ENV["TEAMID"]
