@@ -305,18 +305,17 @@ enum BatteryDischargeTracker {
     }
 
     /// The per-level time-remaining table currently driving the estimate: the learned averaged
-    /// curve (converted from elapsed-offsets to time-remaining) with any user overrides applied.
-    /// When nothing has been learned yet but the user has made edits, the edits sit on top of
-    /// the default linear table so interpolation still has endpoints. Returns `nil` when
-    /// there's nothing learned and nothing edited — the caller should use the plain
-    /// default-lifetime countdown in that case.
+    /// curve with any user overrides applied. When nothing has been learned yet but the user
+    /// has made edits, the edits sit on top of the default linear table so interpolation still
+    /// has endpoints. Returns `nil` when there's nothing learned and nothing edited — the
+    /// caller should use the plain default-lifetime countdown in that case.
     static func effectiveRemainingTable(
         log: BatteryDischargeLog,
         config: BatteryDischargeConfig
     ) -> [Int: TimeInterval]? {
         var table: [Int: TimeInterval]
-        if let learned = averagedProfile(log.completedCycles) {
-            table = learned.offsets.mapValues { max(0, learned.lifetime - $0) }
+        if let learned = averagedRemainingTable(log.completedCycles) {
+            table = learned
         } else if !(log.levelOverrides ?? []).isEmpty {
             table = defaultRemainingTable(config)
         } else {
@@ -324,6 +323,34 @@ enum BatteryDischargeTracker {
         }
         for override in log.levelOverrides ?? [] {
             table[override.level] = override.secondsRemaining
+        }
+        return table
+    }
+
+    /// Average time-remaining per level across completed cycles, computed *within each cycle
+    /// first* (that cycle's lifetime minus that cycle's offset) and then averaged. Averaging
+    /// lifetimes and offsets separately mixes cycle subsets: levels get skipped when the
+    /// voltage drops more than one band between readings, and the lowest bands are only
+    /// reached in some cycles, so a level recorded only in a short cycle would be measured
+    /// against the all-cycle average lifetime and could show MORE time remaining than a
+    /// higher voltage. A final sweep clamps the table monotonic (remaining never increases as
+    /// voltage drops) so residual subset effects can't invert the display or the estimate.
+    static func averagedRemainingTable(_ cycles: [BatteryDischargeCycle]) -> [Int: TimeInterval]? {
+        guard !cycles.isEmpty else { return nil }
+        var sums: [Int: (total: TimeInterval, count: Int)] = [:]
+        for cycle in cycles {
+            for offset in cycle.levelOffsets {
+                let remaining = max(0, cycle.totalLifetime - offset.secondsFromReplacement)
+                let current = sums[offset.level] ?? (0, 0)
+                sums[offset.level] = (current.total + remaining, current.count + 1)
+            }
+        }
+        var table = sums.mapValues { $0.total / Double($0.count) }
+        var cap = TimeInterval.greatestFiniteMagnitude
+        for level in table.keys.sorted(by: >) {
+            let clamped = min(table[level] ?? 0, cap)
+            table[level] = clamped
+            cap = clamped
         }
         return table
     }
