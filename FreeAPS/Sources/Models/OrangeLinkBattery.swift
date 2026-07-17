@@ -92,19 +92,17 @@ struct BatteryLevelOffset: JSON, Equatable {
 }
 
 struct BatteryDischargeCycle: JSON, Equatable {
-    let totalLifetime: TimeInterval
-    let levelOffsets: [BatteryLevelOffset]
+    /// Mutable so the user can correct a session's true end (e.g. the pump died hours before
+    /// the battery was actually swapped).
+    var totalLifetime: TimeInterval
+    var levelOffsets: [BatteryLevelOffset]
     /// When this battery was installed. Optional because cycles recorded before this field
     /// existed have no date.
     var startDate: Date?
-}
 
-/// A user-editable estimate: "when the battery first reads at `level`, it has
-/// `secondsRemaining` left". Stored per-level in the log and applied on top of the learned
-/// (or default) discharge curve.
-struct BatteryLevelRemaining: JSON, Equatable {
-    let level: Int
-    var secondsRemaining: TimeInterval
+    var endDate: Date? {
+        startDate?.addingTimeInterval(totalLifetime)
+    }
 }
 
 /// One raw voltage observation, kept whenever the reading changes so debug reports can show
@@ -130,9 +128,6 @@ struct BatteryDischargeLog: JSON, Equatable {
     var currentLevelTimes: [BatteryLevelTime]
     var completedCycles: [BatteryDischargeCycle]
     var currentExpirationDate: Date?
-    /// User edits to the per-level time-remaining table. Optional so logs persisted before
-    /// this field existed still decode.
-    var levelOverrides: [BatteryLevelRemaining]?
     /// Raw reading history (voltage changes, replacement detections), capped, for debugging.
     /// Optional so logs persisted before this field existed still decode.
     var readingHistory: [BatteryVoltageEvent]?
@@ -150,7 +145,6 @@ struct BatteryDischargeLog: JSON, Equatable {
         currentLevelTimes: [BatteryLevelTime] = [],
         completedCycles: [BatteryDischargeCycle] = [],
         currentExpirationDate: Date? = nil,
-        levelOverrides: [BatteryLevelRemaining]? = nil,
         readingHistory: [BatteryVoltageEvent]? = nil,
         currentValueSince: Date? = nil
     ) {
@@ -161,7 +155,6 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.currentLevelTimes = currentLevelTimes
         self.completedCycles = completedCycles
         self.currentExpirationDate = currentExpirationDate
-        self.levelOverrides = levelOverrides
         self.readingHistory = readingHistory
         self.currentValueSince = currentValueSince
     }
@@ -305,26 +298,13 @@ enum BatteryDischargeTracker {
     }
 
     /// The per-level time-remaining table currently driving the estimate: the learned averaged
-    /// curve with any user overrides applied. When nothing has been learned yet but the user
-    /// has made edits, the edits sit on top of the default linear table so interpolation still
-    /// has endpoints. Returns `nil` when there's nothing learned and nothing edited — the
-    /// caller should use the plain default-lifetime countdown in that case.
+    /// curve. Returns `nil` when nothing has been learned yet — the caller should use the
+    /// plain default-lifetime countdown in that case.
     static func effectiveRemainingTable(
         log: BatteryDischargeLog,
-        config: BatteryDischargeConfig
+        config _: BatteryDischargeConfig
     ) -> [Int: TimeInterval]? {
-        var table: [Int: TimeInterval]
-        if let learned = averagedRemainingTable(log.completedCycles) {
-            table = learned
-        } else if !(log.levelOverrides ?? []).isEmpty {
-            table = defaultRemainingTable(config)
-        } else {
-            return nil
-        }
-        for override in log.levelOverrides ?? [] {
-            table[override.level] = override.secondsRemaining
-        }
-        return table
+        averagedRemainingTable(log.completedCycles)
     }
 
     /// Average time-remaining per level across completed cycles, computed *within each cycle
@@ -370,14 +350,13 @@ enum BatteryDischargeTracker {
     }
 
     /// Rows for the battery-detail screen: every level from the default range plus any learned
-    /// or overridden levels, highest voltage first, each with the time-remaining the estimator
-    /// would use at that level.
+    /// levels, highest voltage first, each with the time-remaining the estimator would use at
+    /// that level.
     static func displayProfile(
         log: BatteryDischargeLog,
         config: BatteryDischargeConfig
     ) -> [BatteryLevelEstimate] {
         let table = effectiveRemainingTable(log: log, config: config) ?? defaultRemainingTable(config)
-        let overrideLevels = Set((log.levelOverrides ?? []).map(\.level))
         let levels = Set(table.keys).union(defaultRemainingTable(config).keys).sorted(by: >)
         return levels.map { lvl in
             let remaining = table[lvl] ?? interpolated(
@@ -388,8 +367,7 @@ enum BatteryDischargeTracker {
             return BatteryLevelEstimate(
                 level: lvl,
                 voltage: Double(lvl) * config.levelGranularity,
-                secondsRemaining: remaining,
-                isOverridden: overrideLevels.contains(lvl)
+                secondsRemaining: remaining
             )
         }
     }
@@ -426,5 +404,4 @@ struct BatteryLevelEstimate: Identifiable {
     let level: Int
     let voltage: Double
     let secondsRemaining: TimeInterval
-    let isOverridden: Bool
 }

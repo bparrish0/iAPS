@@ -219,11 +219,14 @@ final class BaseDeviceDataManager: Injectable, DeviceDataManager {
 
     /// Record a pump battery voltage reading and return the current expiration estimate so the
     /// caller can attach it to the Battery snapshot. Synchronous because pump-status updates
-    /// arrive serially on the pump-manager delegate queue.
-    private func trackPumpBatteryVoltage(_ voltage: Double) -> Date? {
+    /// arrive serially on the pump-manager delegate queue. `date` is when the voltage was
+    /// actually read from the pump — re-deliveries of a cached reading carry the original
+    /// date and are therefore no-ops, so a dead-pump gap before a battery swap doesn't count
+    /// as runtime.
+    private func trackPumpBatteryVoltage(_ voltage: Double, at date: Date) -> Date? {
         var log = storage.retrieve(OpenAPS.Monitor.pumpBatteryLog, as: BatteryDischargeLog.self)
             ?? BatteryDischargeLog()
-        BatteryDischargeTracker.record(value: voltage, at: Date(), into: &log, config: .pump)
+        BatteryDischargeTracker.record(value: voltage, at: date, into: &log, config: .pump)
         storage.save(log, as: OpenAPS.Monitor.pumpBatteryLog)
         return log.currentExpirationDate
     }
@@ -625,8 +628,14 @@ extension BaseDeviceDataManager: PumpManagerDelegate {
         }
 
         let batteryPercent = Int((status.pumpBatteryChargeRemaining ?? 1) * 100)
-        let pumpVoltage = (pumpManager as? MinimedPumpManager)?.batteryVoltage
-        let expirationDate: Date? = pumpVoltage.flatMap { trackPumpBatteryVoltage($0) }
+        let minimedManager = pumpManager as? MinimedPumpManager
+        let pumpVoltage = minimedManager?.batteryVoltage
+        // Timestamp readings with when the pump was actually read, not delivery time: while
+        // the pump is unreachable (dead battery), the cached voltage keeps being re-delivered
+        // on every status update, and stamping those with "now" would count the dead gap
+        // before the swap as battery runtime.
+        let pumpVoltageDate = minimedManager?.batteryVoltageDate
+        let expirationDate: Date? = pumpVoltage.flatMap { trackPumpBatteryVoltage($0, at: pumpVoltageDate ?? Date()) }
         let battery = Battery(
             percent: batteryPercent,
             voltage: pumpVoltage.map { Decimal($0) },

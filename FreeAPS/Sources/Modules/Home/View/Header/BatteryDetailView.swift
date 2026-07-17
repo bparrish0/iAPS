@@ -1,14 +1,21 @@
 import SwiftUI
 
 extension Home {
-    /// Detail sheet for one battery (pump or OrangeLink): current voltage, the editable
-    /// per-voltage time-remaining table driving the estimate, and the history of completed
-    /// battery sessions (deletable, so outliers can be dropped from the learned average).
+    /// Detail sheet for one battery (pump or OrangeLink): current voltage, the per-voltage
+    /// time-remaining table driving the estimate, and the history of completed battery
+    /// sessions — tap a session to correct when it actually ended (e.g. the pump died hours
+    /// before the swap), swipe to delete an outlier.
     struct BatteryDetailView: View {
         let kind: BatteryDeviceKind
         @ObservedObject var state: StateModel
 
-        @State private var editingRow: BatteryLevelEstimate?
+        /// A completed cycle staged for editing, addressed by its index in the stored array.
+        private struct CycleEditTarget: Identifiable {
+            let id: Int
+            let cycle: BatteryDischargeCycle
+        }
+
+        @State private var editingCycle: CycleEditTarget?
 
         private enum DebugEmailStatus: Equatable {
             case idle
@@ -27,7 +34,7 @@ extension Home {
         }
 
         /// Completed cycles newest-first, keeping each row's index into the stored array so
-        /// deletion targets the right cycle.
+        /// edits and deletion target the right cycle.
         private var historyRows: [(originalIndex: Int, cycle: BatteryDischargeCycle)] {
             log.completedCycles.enumerated().map { ($0.offset, $0.element) }.reversed()
         }
@@ -47,20 +54,14 @@ extension Home {
                         Button("Close") { state.batteryDetailKind = nil }
                     }
                 }
-                .sheet(item: $editingRow) { row in
-                    BatteryLevelEditView(
-                        voltageLabel: voltageString(row.voltage),
-                        initialSeconds: row.secondsRemaining,
-                        isOverridden: row.isOverridden,
-                        onSave: { seconds in
-                            state.setBatteryLevelOverride(
-                                kind: kind,
-                                level: row.level,
-                                secondsRemaining: seconds
-                            )
+                .sheet(item: $editingCycle) { target in
+                    BatteryCycleEditView(
+                        cycle: target.cycle,
+                        onSaveEnd: { endDate in
+                            state.setBatteryCycleEnd(kind: kind, at: target.id, endDate: endDate)
                         },
-                        onReset: {
-                            state.setBatteryLevelOverride(kind: kind, level: row.level, secondsRemaining: nil)
+                        onSaveLifetime: { lifetime in
+                            state.setBatteryCycleLifetime(kind: kind, at: target.id, lifetime: lifetime)
                         }
                     )
                 }
@@ -77,7 +78,7 @@ extension Home {
                 }
                 if let lastDate = log.lastValueDate {
                     HStack {
-                        Text("Last reading")
+                        Text("Last pump contact")
                         Spacer()
                         Text(relativeString(lastDate)).foregroundStyle(.secondary)
                     }
@@ -116,47 +117,27 @@ extension Home {
         }
 
         private var estimateSource: String {
-            var source: String
             if log.completedCycles.isEmpty {
-                source = log.cycleIsLearnable
+                return log.cycleIsLearnable
                     ? NSLocalizedString("Default curve (learning this session)", comment: "Battery estimate source")
                     : NSLocalizedString("Default curve", comment: "Battery estimate source")
-            } else {
-                source = String(
-                    format: NSLocalizedString("Learned from %d session(s)", comment: "Battery estimate source"),
-                    log.completedCycles.count
-                )
             }
-            if !(log.levelOverrides ?? []).isEmpty {
-                source += NSLocalizedString(", edited", comment: "Battery estimate source suffix")
-            }
-            return source
+            return String(
+                format: NSLocalizedString("Learned from %d session(s)", comment: "Battery estimate source"),
+                log.completedCycles.count
+            )
         }
 
         private var profileSection: some View {
             Section(
                 header: Text("Time remaining at each voltage"),
-                footer: Text("Tap a level to edit its time remaining. Edited levels override the learned curve.")
+                footer: Text("Learned from completed sessions. To correct it, edit or delete sessions below.")
             ) {
                 ForEach(profileRows) { row in
-                    Button {
-                        editingRow = row
-                    } label: {
-                        HStack {
-                            Text(voltageString(row.voltage)).foregroundStyle(.primary)
-                            Spacer()
-                            Text(durationString(row.secondsRemaining))
-                                .foregroundStyle(row.isOverridden ? Color.accentColor : .secondary)
-                                .italic(row.isOverridden)
-                        }
-                    }
-                    .swipeActions(edge: .trailing) {
-                        if row.isOverridden {
-                            Button("Reset") {
-                                state.setBatteryLevelOverride(kind: kind, level: row.level, secondsRemaining: nil)
-                            }
-                            .tint(.orange)
-                        }
+                    HStack {
+                        Text(voltageString(row.voltage))
+                        Spacer()
+                        Text(durationString(row.secondsRemaining)).foregroundStyle(.secondary)
                     }
                 }
             }
@@ -168,17 +149,21 @@ extension Home {
                 footer: Text(
                     log.completedCycles.isEmpty
                         ? "Each fully used battery is recorded here and averaged into the estimate."
-                        : "Swipe to delete an outlier session so it no longer skews the average."
+                        : "Tap a session to correct when it actually ended — e.g. when the loop lost contact with the pump. Swipe to delete an outlier."
                 )
             ) {
                 if historyRows.isEmpty {
                     Text("No completed sessions yet").foregroundStyle(.secondary)
                 } else {
                     ForEach(historyRows, id: \.originalIndex) { row in
-                        HStack {
-                            Text(sessionDatesString(row.cycle))
-                            Spacer()
-                            Text(durationString(row.cycle.totalLifetime)).foregroundStyle(.secondary)
+                        Button {
+                            editingCycle = CycleEditTarget(id: row.originalIndex, cycle: row.cycle)
+                        } label: {
+                            HStack {
+                                Text(sessionDatesString(row.cycle)).foregroundStyle(.primary)
+                                Spacer()
+                                Text(durationString(row.cycle.totalLifetime)).foregroundStyle(.secondary)
+                            }
                         }
                     }
                     .onDelete { indexSet in
@@ -223,10 +208,9 @@ extension Home {
         }
 
         private func sessionDatesString(_ cycle: BatteryDischargeCycle) -> String {
-            guard let start = cycle.startDate else {
+            guard let start = cycle.startDate, let end = cycle.endDate else {
                 return NSLocalizedString("Session", comment: "Battery session without a date")
             }
-            let end = start.addingTimeInterval(cycle.totalLifetime)
             return dateFormatter.string(from: start) + " – " + dateFormatter.string(from: end)
         }
 
@@ -258,64 +242,90 @@ extension Home {
     }
 }
 
-/// Day/hour wheel editor for one voltage level's time-remaining.
-struct BatteryLevelEditView: View {
-    let voltageLabel: String
-    let initialSeconds: TimeInterval
-    let isOverridden: Bool
-    let onSave: (TimeInterval) -> Void
-    let onReset: () -> Void
+/// Editor for one completed battery session. Sessions with a known start date get a date/time
+/// picker for the true end (runtime follows); legacy sessions without one edit the total
+/// runtime directly with day/hour wheels.
+struct BatteryCycleEditView: View {
+    let cycle: BatteryDischargeCycle
+    let onSaveEnd: (Date) -> Void
+    let onSaveLifetime: (TimeInterval) -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @State private var endDate: Date
     @State private var days: Int
     @State private var hours: Int
 
     init(
-        voltageLabel: String,
-        initialSeconds: TimeInterval,
-        isOverridden: Bool,
-        onSave: @escaping (TimeInterval) -> Void,
-        onReset: @escaping () -> Void
+        cycle: BatteryDischargeCycle,
+        onSaveEnd: @escaping (Date) -> Void,
+        onSaveLifetime: @escaping (TimeInterval) -> Void
     ) {
-        self.voltageLabel = voltageLabel
-        self.initialSeconds = initialSeconds
-        self.isOverridden = isOverridden
-        self.onSave = onSave
-        self.onReset = onReset
-        let clamped = max(0, initialSeconds)
+        self.cycle = cycle
+        self.onSaveEnd = onSaveEnd
+        self.onSaveLifetime = onSaveLifetime
+        _endDate = State(initialValue: cycle.endDate ?? Date())
+        let clamped = max(0, cycle.totalLifetime)
         _days = State(initialValue: Int(clamped / 86400))
         _hours = State(initialValue: Int(clamped.truncatingRemainder(dividingBy: 86400) / 3600))
+    }
+
+    private var newLifetime: TimeInterval {
+        if let start = cycle.startDate {
+            return endDate.timeIntervalSince(start)
+        }
+        return TimeInterval(days * 86400 + hours * 3600)
     }
 
     var body: some View {
         NavigationView {
             Form {
-                Section(header: Text("Time remaining at \(voltageLabel)")) {
-                    HStack(spacing: 0) {
-                        Picker("Days", selection: $days) {
-                            ForEach(0 ..< 91, id: \.self) { Text("\($0)d") }
+                if let start = cycle.startDate {
+                    Section(
+                        footer: Text(
+                            "Set when this battery actually died — e.g. when the loop last talked to the pump — so dead time before the swap doesn't count as runtime."
+                        )
+                    ) {
+                        HStack {
+                            Text("Started")
+                            Spacer()
+                            Text(start.formatted(date: .abbreviated, time: .shortened))
+                                .foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.wheel)
-                        .frame(maxWidth: .infinity)
-                        .clipped()
-                        Picker("Hours", selection: $hours) {
-                            ForEach(0 ..< 24, id: \.self) { Text("\($0)h") }
+                        DatePicker(
+                            "Ended",
+                            selection: $endDate,
+                            in: start.addingTimeInterval(60) ... Date(),
+                            displayedComponents: [.date, .hourAndMinute]
+                        )
+                        HStack {
+                            Text("Runtime")
+                            Spacer()
+                            Text(durationString(newLifetime)).foregroundStyle(.secondary)
                         }
-                        .pickerStyle(.wheel)
-                        .frame(maxWidth: .infinity)
-                        .clipped()
                     }
-                }
-                if isOverridden {
-                    Section {
-                        Button("Reset to learned value", role: .destructive) {
-                            onReset()
-                            dismiss()
+                } else {
+                    Section(
+                        header: Text("Total runtime"),
+                        footer: Text("This session predates start-date tracking, so only its total runtime can be corrected.")
+                    ) {
+                        HStack(spacing: 0) {
+                            Picker("Days", selection: $days) {
+                                ForEach(0 ..< 91, id: \.self) { Text("\($0)d") }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
+                            Picker("Hours", selection: $hours) {
+                                ForEach(0 ..< 24, id: \.self) { Text("\($0)h") }
+                            }
+                            .pickerStyle(.wheel)
+                            .frame(maxWidth: .infinity)
+                            .clipped()
                         }
                     }
                 }
             }
-            .navigationTitle(voltageLabel)
+            .navigationTitle("Battery Session")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -323,11 +333,25 @@ struct BatteryLevelEditView: View {
                 }
                 ToolbarItem(placement: .confirmationAction) {
                     Button("Save") {
-                        onSave(TimeInterval(days * 86400 + hours * 3600))
+                        if cycle.startDate != nil {
+                            onSaveEnd(endDate)
+                        } else {
+                            onSaveLifetime(TimeInterval(days * 86400 + hours * 3600))
+                        }
                         dismiss()
                     }
+                    .disabled(newLifetime <= 0)
                 }
             }
         }
+    }
+
+    private func durationString(_ interval: TimeInterval) -> String {
+        let absInterval = abs(interval)
+        let days = Int(absInterval / 86400)
+        let hours = Int(absInterval.truncatingRemainder(dividingBy: 86400) / 3600)
+        let minutes = Int(absInterval.truncatingRemainder(dividingBy: 3600) / 60)
+        let sign = interval < 0 ? "-" : ""
+        return days >= 1 ? "\(sign)\(days)d \(hours)h" : "\(sign)\(hours)h \(minutes)m"
     }
 }

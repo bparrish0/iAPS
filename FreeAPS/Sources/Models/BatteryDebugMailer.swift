@@ -253,8 +253,7 @@ enum BatteryDebugReport {
           estimateAnchor:       \(log.currentLevelTimes.min(by: { $0.level < $1.level }).map { "\(voltage(Double($0.level) * config.levelGranularity, kind)) band, first seen \(dateFormatter.string(from: $0.date))" } ?? "none (no levels recorded this cycle)")
           currentExpiration:    \(log.currentExpirationDate.map { dateFormatter.string(from: $0) } ?? "nil")
           completedCycles:      \(log.completedCycles.count)
-          levelOverrides:       \(log.levelOverrides?.count ?? 0)
-          learnedProfile:       \(learned.map { "lifetime=\(duration($0.lifetime)), \($0.offsets.count) levels" } ?? "none — estimate uses \(log.levelOverrides?.isEmpty == false ? "default curve + user edits" : "plain default-lifetime countdown")")
+          learnedProfile:       \(learned.map { "lifetime=\(duration($0.lifetime)), \($0.offsets.count) levels" } ?? "none — estimate uses plain default-lifetime countdown")
         """
 
         out += "\n\nCurrent session — first time seen at each level:"

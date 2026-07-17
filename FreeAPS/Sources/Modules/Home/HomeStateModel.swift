@@ -619,17 +619,36 @@ extension Home {
             batteryDetailKind = kind
         }
 
-        /// Set (or clear, when `secondsRemaining` is nil) the user's time-remaining override for
-        /// one voltage level of a battery's discharge table.
-        func setBatteryLevelOverride(kind: BatteryDeviceKind, level: Int, secondsRemaining: TimeInterval?) {
-            var log = provider.batteryLog(for: kind) ?? BatteryDischargeLog()
-            var overrides = log.levelOverrides ?? []
-            overrides.removeAll { $0.level == level }
-            if let secondsRemaining = secondsRemaining {
-                overrides.append(BatteryLevelRemaining(level: level, secondsRemaining: secondsRemaining))
-            }
-            log.levelOverrides = overrides
+        /// Correct a completed cycle's end to when the battery actually died (e.g. when the
+        /// loop lost contact with the pump), so dead time before the swap doesn't count as
+        /// runtime. Only valid for cycles with a known start date.
+        func setBatteryCycleEnd(kind: BatteryDeviceKind, at index: Int, endDate: Date) {
+            guard var log = provider.batteryLog(for: kind),
+                  log.completedCycles.indices.contains(index),
+                  let start = log.completedCycles[index].startDate
+            else { return }
+            let lifetime = endDate.timeIntervalSince(start)
+            guard lifetime > 0 else { return }
+            applyCycleLifetime(&log.completedCycles[index], lifetime)
             finalizeBatteryLogEdit(kind: kind, log: log)
+        }
+
+        /// Correct a completed cycle's total runtime directly — for legacy cycles recorded
+        /// before start dates were stored, where an end date can't be anchored.
+        func setBatteryCycleLifetime(kind: BatteryDeviceKind, at index: Int, lifetime: TimeInterval) {
+            guard var log = provider.batteryLog(for: kind),
+                  log.completedCycles.indices.contains(index),
+                  lifetime > 0
+            else { return }
+            applyCycleLifetime(&log.completedCycles[index], lifetime)
+            finalizeBatteryLogEdit(kind: kind, log: log)
+        }
+
+        /// Level offsets recorded after the corrected end were phantom readings from the dead
+        /// gap — drop them so they stop distorting the learned curve.
+        private func applyCycleLifetime(_ cycle: inout BatteryDischargeCycle, _ lifetime: TimeInterval) {
+            cycle.totalLifetime = lifetime
+            cycle.levelOffsets = cycle.levelOffsets.filter { $0.secondsFromReplacement <= lifetime }
         }
 
         /// Delete one completed discharge cycle from a battery's history (e.g. an outlier
