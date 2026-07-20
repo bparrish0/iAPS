@@ -136,6 +136,15 @@ struct BatteryDischargeLog: JSON, Equatable {
     /// level's first-seen time instead, because raw values bounce with measurement noise.
     /// Optional for backward compatibility.
     var currentValueSince: Date?
+    /// The last few raw readings, kept for median smoothing. Optional for backward compat.
+    var recentRawValues: [Double]?
+    /// The median-smoothed value as of the last reading. Level tracking and replacement
+    /// detection run on smoothed values so a single outlier reading can't record a level
+    /// early or fake a replacement. Optional for backward compat.
+    var lastSmoothedValue: Double?
+    /// Set once the one-time rebuild of level times from raw history has run (repairing
+    /// noise-dip entries recorded before smoothing existed). Optional for backward compat.
+    var smoothingMigrationDone: Bool?
 
     init(
         replacementDate: Date? = nil,
@@ -146,7 +155,10 @@ struct BatteryDischargeLog: JSON, Equatable {
         completedCycles: [BatteryDischargeCycle] = [],
         currentExpirationDate: Date? = nil,
         readingHistory: [BatteryVoltageEvent]? = nil,
-        currentValueSince: Date? = nil
+        currentValueSince: Date? = nil,
+        recentRawValues: [Double]? = nil,
+        lastSmoothedValue: Double? = nil,
+        smoothingMigrationDone: Bool? = nil
     ) {
         self.replacementDate = replacementDate
         self.cycleIsLearnable = cycleIsLearnable
@@ -157,6 +169,9 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.currentExpirationDate = currentExpirationDate
         self.readingHistory = readingHistory
         self.currentValueSince = currentValueSince
+        self.recentRawValues = recentRawValues
+        self.lastSmoothedValue = lastSmoothedValue
+        self.smoothingMigrationDone = smoothingMigrationDone
     }
 }
 
@@ -171,6 +186,12 @@ enum BatteryDischargeTracker {
         Int((value / config.levelGranularity).rounded(.down))
     }
 
+    /// Size of the median window for noise filtering. Level tracking and replacement
+    /// detection use the median of the last few readings, so a single outlier reading can't
+    /// record a level early, move the countdown anchor, or fake a replacement — two
+    /// consecutive readings in a band are required before it counts.
+    static let smoothingWindow = 3
+
     /// Record a new reading; mutates `log` in place.
     static func record(
         value: Double,
@@ -178,20 +199,38 @@ enum BatteryDischargeTracker {
         into log: inout BatteryDischargeLog,
         config: BatteryDischargeConfig
     ) {
+        if log.smoothingMigrationDone != true {
+            rebuildLevelTimesFromHistory(&log, config: config)
+            log.smoothingMigrationDone = true
+        }
+
+        // Only feed the smoothing buffer genuinely new readings (cached re-deliveries carry
+        // the same value and timestamp).
+        if log.lastValue != value || log.lastValueDate != date {
+            var buffer = log.recentRawValues ?? []
+            buffer.append(value)
+            if buffer.count > smoothingWindow {
+                buffer.removeFirst(buffer.count - smoothingWindow)
+            }
+            log.recentRawValues = buffer
+        }
+        let buffer = log.recentRawValues ?? []
+        let smoothed = buffer.count >= smoothingWindow ? median(buffer) : value
+
         defer {
             log.lastValue = value
             log.lastValueDate = date
+            log.lastSmoothedValue = smoothed
             // The estimate anchors itself on the lowest level's first-seen time inside
             // `estimatedExpiration`; the value/date here only serve as a fallback anchor.
-            log.currentExpirationDate = estimatedExpiration(at: value, from: date, log: log, config: config)
+            log.currentExpirationDate = estimatedExpiration(at: smoothed, from: date, log: log, config: config)
         }
 
-        let priorWasLow = (log.lastValue ?? .greatestFiniteMagnitude) < config.replacementLowThreshold
-        let isReplacement = priorWasLow && value >= config.replacementHighThreshold
+        let priorWasLow = (log.lastSmoothedValue ?? .greatestFiniteMagnitude) < config.replacementLowThreshold
+        let isReplacement = priorWasLow && smoothed >= config.replacementHighThreshold
 
         // Debug history: keep a timestamped event for the first-ever reading, every detected
-        // replacement, and every reading whose value differs from the previous one. The same
-        // condition marks a voltage change, which re-anchors the countdown.
+        // replacement, and every raw reading whose value differs from the previous one.
         if log.lastValue == nil || isReplacement || value != log.lastValue {
             log.currentValueSince = date
             let kind: String? = log.lastValue == nil ? "first" : (isReplacement ? "replacement" : nil)
@@ -225,6 +264,8 @@ enum BatteryDischargeTracker {
             log.replacementDate = date
             log.cycleIsLearnable = true
             log.currentLevelTimes = [BatteryLevelTime(level: level(for: value, config: config), date: date)]
+            // Old battery's readings say nothing about the fresh one.
+            log.recentRawValues = [value]
             return
         }
 
@@ -233,14 +274,93 @@ enum BatteryDischargeTracker {
         if log.replacementDate == nil {
             log.replacementDate = date
             log.cycleIsLearnable = false
-            log.currentLevelTimes = [BatteryLevelTime(level: level(for: value, config: config), date: date)]
+            log.currentLevelTimes = [BatteryLevelTime(level: level(for: smoothed, config: config), date: date)]
             return
         }
 
-        let lvl = level(for: value, config: config)
+        let lvl = level(for: smoothed, config: config)
         if !log.currentLevelTimes.contains(where: { $0.level == lvl }) {
             log.currentLevelTimes.append(BatteryLevelTime(level: lvl, date: date))
         }
+    }
+
+    private static func median(_ values: [Double]) -> Double {
+        let sorted = values.sorted()
+        return sorted[sorted.count / 2]
+    }
+
+    /// One-time repair after introducing median smoothing: re-derive per-level first-seen
+    /// times from the raw reading history, so single-reading noise dips recorded by earlier
+    /// builds stop anchoring the countdown (current cycle) and polluting learned offsets
+    /// (completed cycles). Entries that predate history coverage can't be re-derived and are
+    /// kept as recorded.
+    static func rebuildLevelTimesFromHistory(_ log: inout BatteryDischargeLog, config: BatteryDischargeConfig) {
+        guard let history = log.readingHistory, let coverageStart = history.first?.date else { return }
+
+        if let replacement = log.replacementDate {
+            let events = history.filter { $0.date >= replacement }
+            let recomputed = smoothedFirstSeen(events: events, config: config)
+            var rebuilt = log.currentLevelTimes.filter { $0.date < coverageStart }
+            for (lvl, firstDate) in recomputed.sorted(by: { $0.value < $1.value })
+                where !rebuilt.contains(where: { $0.level == lvl })
+            {
+                rebuilt.append(BatteryLevelTime(level: lvl, date: firstDate))
+            }
+            log.currentLevelTimes = rebuilt.sorted { $0.date < $1.date }
+        }
+
+        for index in log.completedCycles.indices {
+            guard let start = log.completedCycles[index].startDate else { continue }
+            let end = start.addingTimeInterval(log.completedCycles[index].totalLifetime)
+            let events = history.filter { $0.date >= start && $0.date <= end }
+            guard !events.isEmpty else { continue }
+            let recomputed = smoothedFirstSeen(events: events, config: config)
+            var offsets: [BatteryLevelOffset] = []
+            for original in log.completedCycles[index].levelOffsets {
+                let originalDate = start.addingTimeInterval(original.secondsFromReplacement)
+                if originalDate < coverageStart {
+                    offsets.append(original)
+                } else if let firstDate = recomputed[original.level] {
+                    offsets.append(BatteryLevelOffset(
+                        level: original.level,
+                        secondsFromReplacement: firstDate.timeIntervalSince(start)
+                    ))
+                }
+                // else: the level only ever appeared as an unconfirmed noise dip — drop it.
+            }
+            for (lvl, firstDate) in recomputed where !offsets.contains(where: { $0.level == lvl }) {
+                offsets.append(BatteryLevelOffset(
+                    level: lvl,
+                    secondsFromReplacement: firstDate.timeIntervalSince(start)
+                ))
+            }
+            log.completedCycles[index].levelOffsets = offsets.sorted { $0.secondsFromReplacement < $1.secondsFromReplacement }
+        }
+    }
+
+    /// Walk raw reading events with the median window, returning each level's first genuinely
+    /// reached time. Mirrors the live smoothing closely enough for repair purposes (history
+    /// records changes only, but a single-reading dip still shows as one outlier between two
+    /// normal values and gets filtered the same way).
+    private static func smoothedFirstSeen(
+        events: [BatteryVoltageEvent],
+        config: BatteryDischargeConfig
+    ) -> [Int: Date] {
+        var buffer: [Double] = []
+        var firstSeen: [Int: Date] = [:]
+        for event in events {
+            if event.kind == "replacement" { buffer = [] }
+            buffer.append(event.value)
+            if buffer.count > smoothingWindow {
+                buffer.removeFirst(buffer.count - smoothingWindow)
+            }
+            let smoothed = buffer.count >= smoothingWindow ? median(buffer) : event.value
+            let lvl = level(for: smoothed, config: config)
+            if firstSeen[lvl] == nil {
+                firstSeen[lvl] = event.date
+            }
+        }
+        return firstSeen
     }
 
     /// Average each level's elapsed-time-from-replacement and the total lifetime across all
