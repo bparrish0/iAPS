@@ -145,6 +145,13 @@ struct BatteryDischargeLog: JSON, Equatable {
     /// Set once the one-time rebuild of level times from raw history has run (repairing
     /// noise-dip entries recorded before smoothing existed). Optional for backward compat.
     var smoothingMigrationDone: Bool?
+    /// When a reading below the replacement-low threshold was last seen — i.e. the dying
+    /// battery's last real contact. Cycles finalize at this time rather than at
+    /// `lastValueDate`: median smoothing delays replacement detection by one reading, so by
+    /// detection time `lastValueDate` already points at the NEW battery's first reading and
+    /// would count the dead gap before the swap as runtime. Cleared at each replacement.
+    /// Optional for backward compat.
+    var lastLowValueDate: Date?
 
     init(
         replacementDate: Date? = nil,
@@ -158,7 +165,8 @@ struct BatteryDischargeLog: JSON, Equatable {
         currentValueSince: Date? = nil,
         recentRawValues: [Double]? = nil,
         lastSmoothedValue: Double? = nil,
-        smoothingMigrationDone: Bool? = nil
+        smoothingMigrationDone: Bool? = nil,
+        lastLowValueDate: Date? = nil
     ) {
         self.replacementDate = replacementDate
         self.cycleIsLearnable = cycleIsLearnable
@@ -172,6 +180,7 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.recentRawValues = recentRawValues
         self.lastSmoothedValue = lastSmoothedValue
         self.smoothingMigrationDone = smoothingMigrationDone
+        self.lastLowValueDate = lastLowValueDate
     }
 }
 
@@ -221,6 +230,9 @@ enum BatteryDischargeTracker {
             log.lastValue = value
             log.lastValueDate = date
             log.lastSmoothedValue = smoothed
+            if value < config.replacementLowThreshold {
+                log.lastLowValueDate = date
+            }
             // The estimate anchors itself on the lowest level's first-seen time inside
             // `estimatedExpiration`; the value/date here only serve as a fallback anchor.
             log.currentExpirationDate = estimatedExpiration(at: smoothed, from: date, log: log, config: config)
@@ -244,16 +256,21 @@ enum BatteryDischargeTracker {
 
         if isReplacement {
             // Finalize the prior cycle if it began from a detected replacement (not synthetic).
+            // Death = the dying battery's last real low reading, not lastValueDate: smoothing
+            // delays detection by one reading, so lastValueDate already points at the fresh
+            // battery's first reading and would count the dead gap as runtime.
             if log.cycleIsLearnable,
                let start = log.replacementDate,
-               let death = log.lastValueDate,
+               let death = log.lastLowValueDate ?? log.lastValueDate,
                !log.currentLevelTimes.isEmpty
             {
                 let lifetime = death.timeIntervalSince(start)
                 if lifetime > 0 {
-                    let offsets = log.currentLevelTimes.map {
-                        BatteryLevelOffset(level: $0.level, secondsFromReplacement: $0.date.timeIntervalSince(start))
-                    }
+                    let offsets = log.currentLevelTimes
+                        .filter { $0.date <= death }
+                        .map {
+                            BatteryLevelOffset(level: $0.level, secondsFromReplacement: $0.date.timeIntervalSince(start))
+                        }
                     log.completedCycles
                         .append(BatteryDischargeCycle(totalLifetime: lifetime, levelOffsets: offsets, startDate: start))
                     if log.completedCycles.count > config.maxStoredCycles {
@@ -266,6 +283,7 @@ enum BatteryDischargeTracker {
             log.currentLevelTimes = [BatteryLevelTime(level: level(for: value, config: config), date: date)]
             // Old battery's readings say nothing about the fresh one.
             log.recentRawValues = [value]
+            log.lastLowValueDate = nil
             return
         }
 
