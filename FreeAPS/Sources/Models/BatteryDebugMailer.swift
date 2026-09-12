@@ -251,6 +251,7 @@ enum BatteryDebugReport {
           lastValue:            \(log.lastValue.map { voltage($0, kind) } ?? "nil") at \(log.lastValueDate.map { dateFormatter.string(from: $0) } ?? "nil")
           lastSmoothedValue:    \(log.lastSmoothedValue.map { voltage($0, kind) } ?? "nil") (median of last \(BatteryDischargeTracker.smoothingWindow); drives level tracking)
           lastLowValueDate:     \(log.lastLowValueDate.map { dateFormatter.string(from: $0) } ?? "nil") (dying battery's last contact; cycles finalize here)
+          lowSeenThisCycle:     \(log.lowSeenThisCycle.map { String($0) } ?? "nil (rebuilt from history on next reading)") (smoothed value has been below replacementLow; required for replacement detection)
           currentValueSince:    \(log.currentValueSince.map { dateFormatter.string(from: $0) } ?? "nil (no voltage change seen since this field was added)")
           estimateAnchor:       \(log.currentLevelTimes.min(by: { $0.level < $1.level }).map { "\(voltage(Double($0.level) * config.levelGranularity, kind)) band, first seen \(dateFormatter.string(from: $0.date))" } ?? "none (no levels recorded this cycle)")
           currentExpiration:    \(log.currentExpirationDate.map { dateFormatter.string(from: $0) } ?? "nil")

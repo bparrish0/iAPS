@@ -152,6 +152,14 @@ struct BatteryDischargeLog: JSON, Equatable {
     /// would count the dead gap before the swap as runtime. Cleared at each replacement.
     /// Optional for backward compat.
     var lastLowValueDate: Date?
+    /// True once the *smoothed* value has dropped below the replacement-low threshold during
+    /// the current cycle — i.e. this battery has genuinely been low. Replacement detection
+    /// requires this rather than "the previous smoothed value was low": the median window
+    /// walks through intermediate values across a swap (1.17 → 1.54 → 1.56), so a fresh
+    /// battery whose first reading lands in the dead zone between the two thresholds never
+    /// produced a single low→high step and was missed entirely. Cleared at each replacement.
+    /// Optional for backward compat; nil is rebuilt from `readingHistory` on the next reading.
+    var lowSeenThisCycle: Bool?
 
     init(
         replacementDate: Date? = nil,
@@ -166,7 +174,8 @@ struct BatteryDischargeLog: JSON, Equatable {
         recentRawValues: [Double]? = nil,
         lastSmoothedValue: Double? = nil,
         smoothingMigrationDone: Bool? = nil,
-        lastLowValueDate: Date? = nil
+        lastLowValueDate: Date? = nil,
+        lowSeenThisCycle: Bool? = nil
     ) {
         self.replacementDate = replacementDate
         self.cycleIsLearnable = cycleIsLearnable
@@ -181,6 +190,7 @@ struct BatteryDischargeLog: JSON, Equatable {
         self.lastSmoothedValue = lastSmoothedValue
         self.smoothingMigrationDone = smoothingMigrationDone
         self.lastLowValueDate = lastLowValueDate
+        self.lowSeenThisCycle = lowSeenThisCycle
     }
 }
 
@@ -212,6 +222,9 @@ enum BatteryDischargeTracker {
             rebuildLevelTimesFromHistory(&log, config: config)
             log.smoothingMigrationDone = true
         }
+        if log.lowSeenThisCycle == nil {
+            log.lowSeenThisCycle = smoothedLowSeen(sinceReplacementIn: log, config: config)
+        }
 
         // Only feed the smoothing buffer genuinely new readings (cached re-deliveries carry
         // the same value and timestamp).
@@ -233,21 +246,52 @@ enum BatteryDischargeTracker {
             if value < config.replacementLowThreshold {
                 log.lastLowValueDate = date
             }
+            if smoothed < config.replacementLowThreshold {
+                log.lowSeenThisCycle = true
+            }
             // The estimate anchors itself on the lowest level's first-seen time inside
             // `estimatedExpiration`; the value/date here only serve as a fallback anchor.
             log.currentExpirationDate = estimatedExpiration(at: smoothed, from: date, log: log, config: config)
         }
 
+        // A replacement is "this battery has genuinely been low at some point this cycle, and
+        // the smoothed value is now back at fresh-battery level". The low state is sticky
+        // (`lowSeenThisCycle`) rather than "the immediately previous smoothed value was low":
+        // the median window steps through intermediate values across a swap, so a fresh cell
+        // whose first reading lands between the two thresholds never produces a one-step jump.
         let priorWasLow = (log.lastSmoothedValue ?? .greatestFiniteMagnitude) < config.replacementLowThreshold
-        let isReplacement = priorWasLow && smoothed >= config.replacementHighThreshold
+        let hasBeenLow = priorWasLow || (log.lowSeenThisCycle ?? false)
+        let isReplacement = hasBeenLow && smoothed >= config.replacementHighThreshold
+
+        // The fresh battery's first reading is the first one after the dying battery's last low
+        // reading — that's when it was actually installed. Detection lags it by however many
+        // readings the median window needed, so back-date the replacement to it when we can.
+        let installedAt: Date = {
+            guard isReplacement, let death = log.lastLowValueDate,
+                  let firstFresh = (log.readingHistory ?? []).first(where: { $0.date > death }),
+                  firstFresh.date <= date
+            else { return date }
+            return firstFresh.date
+        }()
 
         // Debug history: keep a timestamped event for the first-ever reading, every detected
-        // replacement, and every raw reading whose value differs from the previous one.
+        // replacement, and every raw reading whose value differs from the previous one. A
+        // back-dated replacement marks the fresh battery's first reading rather than the
+        // reading that finally confirmed it.
         if log.lastValue == nil || isReplacement || value != log.lastValue {
             log.currentValueSince = date
-            let kind: String? = log.lastValue == nil ? "first" : (isReplacement ? "replacement" : nil)
+            let markHere = isReplacement && installedAt == date
+            let kind: String? = log.lastValue == nil ? "first" : (markHere ? "replacement" : nil)
             var history = log.readingHistory ?? []
-            history.append(BatteryVoltageEvent(value: value, date: date, kind: kind))
+            if isReplacement, !markHere,
+               let index = history.firstIndex(where: { $0.date == installedAt })
+            {
+                let event = history[index]
+                history[index] = BatteryVoltageEvent(value: event.value, date: event.date, kind: "replacement")
+            }
+            if log.lastValue == nil || value != log.lastValue || markHere {
+                history.append(BatteryVoltageEvent(value: value, date: date, kind: kind))
+            }
             if history.count > maxReadingHistory {
                 history.removeFirst(history.count - maxReadingHistory)
             }
@@ -278,12 +322,17 @@ enum BatteryDischargeTracker {
                     }
                 }
             }
-            log.replacementDate = date
+            log.replacementDate = installedAt
             log.cycleIsLearnable = true
-            log.currentLevelTimes = [BatteryLevelTime(level: level(for: value, config: config), date: date)]
+            // Seed the cycle with the confirmed (smoothed, ≥ high threshold) level at install
+            // time. Not the raw readings between install and confirmation: a fresh cell's first
+            // reading can sit in the 1.50 band and would otherwise pin that band's first-seen
+            // time to +0 — anchoring the countdown a week early and polluting the learned curve.
+            log.currentLevelTimes = [BatteryLevelTime(level: level(for: smoothed, config: config), date: installedAt)]
             // Old battery's readings say nothing about the fresh one.
             log.recentRawValues = [value]
             log.lastLowValueDate = nil
+            log.lowSeenThisCycle = false
             return
         }
 
@@ -381,6 +430,44 @@ enum BatteryDischargeTracker {
         return firstSeen
     }
 
+    /// Whether the smoothed value has dropped below the replacement-low threshold at any point
+    /// since the current cycle began, replayed from the raw reading history. Used once to
+    /// backfill `lowSeenThisCycle` for logs persisted before that flag existed — including a
+    /// log stuck on a dead battery's cycle because the swap was missed, which then detects
+    /// the replacement on the next reading.
+    static func smoothedLowSeen(sinceReplacementIn log: BatteryDischargeLog, config: BatteryDischargeConfig) -> Bool {
+        guard let replacement = log.replacementDate, let history = log.readingHistory else { return false }
+        var buffer: [Double] = []
+        for event in history where event.date >= replacement {
+            if event.kind == "replacement" { buffer = [] }
+            buffer.append(event.value)
+            if buffer.count > smoothingWindow {
+                buffer.removeFirst(buffer.count - smoothingWindow)
+            }
+            let smoothed = buffer.count >= smoothingWindow ? median(buffer) : event.value
+            if smoothed < config.replacementLowThreshold { return true }
+        }
+        return false
+    }
+
+    /// A cycle's level offsets with upward bounces removed: walking in time order, a level is
+    /// kept only if it is lower than every level already reached. A level first seen *after*
+    /// a lower one (e.g. a 1.65 V spike on the first read after a multi-day dead gap, a week
+    /// into the cycle) is a recovery/measurement bounce, not discharge data — and because the
+    /// remaining-time table is clamped monotonic from the top, one such entry would cap the
+    /// countdown for every fresher band at that late, short remaining time.
+    static func dischargeOffsets(_ cycle: BatteryDischargeCycle) -> [BatteryLevelOffset] {
+        var kept: [BatteryLevelOffset] = []
+        var lowest = Int.max
+        for offset in cycle.levelOffsets.sorted(by: { $0.secondsFromReplacement < $1.secondsFromReplacement })
+            where offset.level < lowest
+        {
+            kept.append(offset)
+            lowest = offset.level
+        }
+        return kept
+    }
+
     /// Average each level's elapsed-time-from-replacement and the total lifetime across all
     /// completed cycles. Returns `nil` when no full cycle has been logged yet.
     static func averagedProfile(_ cycles: [BatteryDischargeCycle])
@@ -390,7 +477,7 @@ enum BatteryDischargeTracker {
         let lifetime = cycles.map(\.totalLifetime).reduce(0, +) / Double(cycles.count)
         var sums: [Int: (total: TimeInterval, count: Int)] = [:]
         for cycle in cycles {
-            for offset in cycle.levelOffsets {
+            for offset in dischargeOffsets(cycle) {
                 let current = sums[offset.level] ?? (0, 0)
                 sums[offset.level] = (current.total + offset.secondsFromReplacement, current.count + 1)
             }
@@ -457,7 +544,7 @@ enum BatteryDischargeTracker {
         guard !cycles.isEmpty else { return nil }
         var sums: [Int: (total: TimeInterval, count: Int)] = [:]
         for cycle in cycles {
-            for offset in cycle.levelOffsets {
+            for offset in dischargeOffsets(cycle) {
                 let remaining = max(0, cycle.totalLifetime - offset.secondsFromReplacement)
                 let current = sums[offset.level] ?? (0, 0)
                 sums[offset.level] = (current.total + remaining, current.count + 1)
