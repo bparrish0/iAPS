@@ -190,6 +190,7 @@
 		3862CC05273D152B00BF832C /* CalibrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3862CC04273D152B00BF832C /* CalibrationService.swift */; };
 		3862CC1F273FDC9200BF832C /* CalibrationsChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3862CC1E273FDC9200BF832C /* CalibrationsChart.swift */; };
 		3862CC2E2743F9F700BF832C /* CalendarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3862CC2D2743F9F700BF832C /* CalendarManager.swift */; };
+		7C1E5A2B9D3F4E6A8B0C1D2E /* BatteryCalendarSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1E5A2B9D3F4E6A8B0C1D2F /* BatteryCalendarSync.swift */; };
 		3870FF4725EC187A0088248F /* BloodGlucose.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3870FF4225EC13F40088248F /* BloodGlucose.swift */; };
 		3871F38725ED661C0013ECB5 /* Suggestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3871F38625ED661C0013ECB5 /* Suggestion.swift */; };
 		3871F39C25ED892B0013ECB5 /* TempTarget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3871F39B25ED892B0013ECB5 /* TempTarget.swift */; };
@@ -829,6 +830,7 @@
 		3862CC04273D152B00BF832C /* CalibrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationService.swift; sourceTree = "<group>"; };
 		3862CC1E273FDC9200BF832C /* CalibrationsChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationsChart.swift; sourceTree = "<group>"; };
 		3862CC2D2743F9F700BF832C /* CalendarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarManager.swift; sourceTree = "<group>"; };
+		7C1E5A2B9D3F4E6A8B0C1D2F /* BatteryCalendarSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryCalendarSync.swift; sourceTree = "<group>"; };
 		3870FF4225EC13F40088248F /* BloodGlucose.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BloodGlucose.swift; sourceTree = "<group>"; };
 		3871F38625ED661C0013ECB5 /* Suggestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suggestion.swift; sourceTree = "<group>"; };
 		3871F39B25ED892B0013ECB5 /* TempTarget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = TempTarget.swift; sourceTree = "<group>"; };
@@ -1940,6 +1942,7 @@
 			isa = PBXGroup;
 			children = (
 				3862CC2D2743F9F700BF832C /* CalendarManager.swift */,
+				7C1E5A2B9D3F4E6A8B0C1D2F /* BatteryCalendarSync.swift */,
 			);
 			path = Calendar;
 			sourceTree = "<group>";
@@ -3168,6 +3171,7 @@
 				F273F9602DE73ABE00BF0FFC /* IOBTick0.swift in Sources */,
 				195D80B72AF697B800D25097 /* DynamicDataFlow.swift in Sources */,
 				3862CC2E2743F9F700BF832C /* CalendarManager.swift in Sources */,
+				7C1E5A2B9D3F4E6A8B0C1D2E /* BatteryCalendarSync.swift in Sources */,
 				CEA4F62329BE10F70011ADF7 /* SavitzkyGolayFilter.swift in Sources */,
 				38B4F3C325E2A20B00E76A18 /* PumpSetupView.swift in Sources */,
 				38E4453C274E411700EC9A94 /* Disk+Codable.swift in Sources */,

@@ -12,6 +12,7 @@ extension Home {
         @Injected() var appCoordinator: AppCoordinator!
         @Injected() var deviceDataManager: DeviceDataManager!
         @Injected() var apsManager: APSManager!
+        @Injected() var batteryCalendarSync: BatteryCalendarSync!
         @Injected() var nightscoutManager: NightscoutManager!
         @Injected() var storage: TempTargetsStorage!
         @Injected() var keychain: Keychain!
@@ -35,6 +36,10 @@ extension Home {
         @Published var orangeLinkExpirationDate: Date?
         @Published var batteryDetailKind: BatteryDeviceKind?
         @Published var batteryDetailLog: BatteryDischargeLog?
+        /// Calendar-sync controls for the battery currently shown in the detail sheet.
+        @Published var batteryCalendarEnabled = false
+        @Published var batteryCalendarID = ""
+        @Published var batteryCalendars: [BatteryCalendarChoice] = []
         @Published var insulinExpirationDate: Date?
         @Published var insulinEstimateUsesLatestTddOnly: Bool = UserDefaults.standard
             .bool(forKey: "insulinEstimateUsesLatestTddOnly")
@@ -616,7 +621,46 @@ extension Home {
         /// Open the battery-detail sheet for the given battery, loading its persisted log.
         func presentBatteryDetail(_ kind: BatteryDeviceKind) {
             batteryDetailLog = provider.batteryLog(for: kind)
+            batteryCalendarEnabled = batteryCalendarSync.isEnabled(kind)
+            batteryCalendarID = batteryCalendarSync.calendarIdentifier(kind) ?? ""
+            batteryCalendars = batteryCalendarSync.availableCalendars()
             batteryDetailKind = kind
+        }
+
+        /// Turn calendar mirroring of this battery's estimate on or off. Turning it on asks for
+        /// calendar access (first time), loads the calendar list, preselects a calendar, and
+        /// creates the event; turning it off deletes the event.
+        func setBatteryCalendarEnabled(_ enabled: Bool, for kind: BatteryDeviceKind) {
+            batteryCalendarEnabled = enabled
+            guard enabled else {
+                batteryCalendarSync.setEnabled(false, calendarIdentifier: batteryCalendarSync.calendarIdentifier(kind), for: kind)
+                batteryCalendarSync.sync(kind)
+                return
+            }
+            batteryCalendarSync.requestAccessIfNeeded()
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] granted in
+                    guard let self = self else { return }
+                    self.batteryCalendars = granted ? self.batteryCalendarSync.availableCalendars() : []
+                    if granted, !self.batteryCalendars.contains(where: { $0.id == self.batteryCalendarID }) {
+                        self.batteryCalendarID = self.batteryCalendarSync.suggestedCalendarIdentifier()
+                            ?? self.batteryCalendars.first?.id ?? ""
+                    }
+                    self.batteryCalendarSync.setEnabled(
+                        true,
+                        calendarIdentifier: self.batteryCalendarID.isEmpty ? nil : self.batteryCalendarID,
+                        for: kind
+                    )
+                    self.batteryCalendarSync.sync(kind)
+                }
+                .store(in: &lifetime)
+        }
+
+        /// Move this battery's event to a different calendar.
+        func setBatteryCalendarID(_ id: String, for kind: BatteryDeviceKind) {
+            batteryCalendarID = id
+            batteryCalendarSync.setEnabled(batteryCalendarEnabled, calendarIdentifier: id.isEmpty ? nil : id, for: kind)
+            batteryCalendarSync.sync(kind)
         }
 
         /// Correct a completed cycle's end to when the battery actually died (e.g. when the
@@ -696,6 +740,8 @@ extension Home {
             }
             provider.saveBatteryLog(log, for: kind)
             batteryDetailLog = log
+            // Session edits change the estimate, so move the calendar event with it.
+            batteryCalendarSync.sync(kind)
 
             switch kind {
             case .orangeLink:

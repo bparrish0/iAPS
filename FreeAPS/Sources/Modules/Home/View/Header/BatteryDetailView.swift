@@ -43,6 +43,7 @@ extension Home {
             NavigationView {
                 Form {
                     currentSection
+                    calendarSection
                     profileSection
                     historySection
                     debugSection
@@ -112,6 +113,49 @@ extension Home {
                     Text("Estimate source")
                     Spacer()
                     Text(estimateSource).foregroundStyle(.secondary)
+                }
+            }
+        }
+
+        private var calendarSection: some View {
+            Section(
+                header: Text("Calendar"),
+                footer: Text(
+                    state.batteryCalendarEnabled
+                        ? "An event is placed at the estimated empty time, with an alert, and moves whenever the estimate changes."
+                        : "Put the estimated empty time in a calendar on this device."
+                )
+            ) {
+                Toggle(
+                    "Add estimate to Calendar",
+                    isOn: Binding(
+                        get: { state.batteryCalendarEnabled },
+                        set: { state.setBatteryCalendarEnabled($0, for: kind) }
+                    )
+                )
+                if state.batteryCalendarEnabled {
+                    if state.batteryCalendars.isNotEmpty {
+                        Picker(
+                            "Calendar",
+                            selection: Binding(
+                                get: { state.batteryCalendarID },
+                                set: { state.setBatteryCalendarID($0, for: kind) }
+                            )
+                        ) {
+                            ForEach(state.batteryCalendars) { choice in
+                                Text(choice.title).tag(choice.id)
+                            }
+                        }
+                    } else {
+                        Text(
+                            "If you are not seeing calendars to choose here, please go to Settings -> iAPS -> Calendars and change permissions to \"Full Access\""
+                        ).font(.footnote)
+                        Button("Open Settings") {
+                            if let url = URL(string: UIApplication.openSettingsURLString) {
+                                UIApplication.shared.open(url)
+                            }
+                        }
+                    }
                 }
             }
         }
