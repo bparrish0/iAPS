@@ -189,6 +189,8 @@ final class OpenAPS {
                         suggestion.timestamp = suggestion.deliverAt ?? clock
                         // Save
                         self.storage.save(suggestion, as: Enact.suggested)
+                        // Keep the full reason text for the daily Auto ISF export.
+                        LoopReasonHistory.append(suggestion.reason, at: suggestion.timestamp ?? clock, storage: self.storage)
 
                         promise(.success(suggestion))
                     } else {

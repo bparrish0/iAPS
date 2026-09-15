@@ -4,6 +4,7 @@ extension AutoISF {
     final class StateModel: BaseStateModel<Provider> {
         @Injected() var settings: SettingsManager!
         @Injected() var storage: FileStorage!
+        @Injected() var exportManager: AutoISFExportManager!
 
         @Published var autoisf: Bool = false
         @Published var enableBGacceleration: Bool = true
@@ -37,11 +38,27 @@ extension AutoISF {
         @Published var ketoProtectBasalPercent: Decimal = 20
         @Published var ketoProtectBasalAbsolut: Decimal = 0
 
+        // Daily history export to Relayboard
+        @Published var autoISFDailyExport = false
+        @Published var relayboardURL = ""
+        @Published var exportStatus = ""
+
         // General settings
         @Published var units: GlucoseUnits = .mgdL
 
+        /// Post today so far and yesterday to Relayboard right now.
+        func exportNow() {
+            exportStatus = NSLocalizedString("Posting…", comment: "Auto ISF export status")
+            Task { @MainActor in
+                exportStatus = await exportManager.export(days: 1, includeToday: true)
+            }
+        }
+
         override func subscribe() {
             subscribeSetting(\.autoisf, on: $autoisf) { autoisf = $0 }
+            subscribeSetting(\.autoISFDailyExport, on: $autoISFDailyExport) { autoISFDailyExport = $0 }
+            subscribeSetting(\.relayboardURL, on: $relayboardURL) { relayboardURL = $0 }
+            exportStatus = exportManager.lastExportStatus ?? ""
             subscribeSetting(\.enableBGacceleration, on: $enableBGacceleration) { enableBGacceleration = $0 }
             subscribeSetting(\.smbDeliveryRatioBGrange, on: $smbDeliveryRatioBGrange) { smbDeliveryRatioBGrange = $0 }
 

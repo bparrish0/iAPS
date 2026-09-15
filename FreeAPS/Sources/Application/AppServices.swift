@@ -20,6 +20,7 @@ class AppServices: ObservableObject {
         _ = FreeAPSApp.resolver.resolve(FetchAnnouncementsManager.self)!
         _ = FreeAPSApp.resolver.resolve(CalendarManager.self)!
         _ = FreeAPSApp.resolver.resolve(BatteryCalendarSync.self)!
+        _ = FreeAPSApp.resolver.resolve(AutoISFExportManager.self)!
         _ = FreeAPSApp.resolver.resolve(UserNotificationsManager.self)!
         _ = FreeAPSApp.resolver.resolve(WatchManager.self)!
         _ = FreeAPSApp.resolver.resolve(HealthKitManager.self)!

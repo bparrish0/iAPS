@@ -190,6 +190,7 @@
 		3862CC05273D152B00BF832C /* CalibrationService.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3862CC04273D152B00BF832C /* CalibrationService.swift */; };
 		3862CC1F273FDC9200BF832C /* CalibrationsChart.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3862CC1E273FDC9200BF832C /* CalibrationsChart.swift */; };
 		3862CC2E2743F9F700BF832C /* CalendarManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3862CC2D2743F9F700BF832C /* CalendarManager.swift */; };
+		7C1E5A2B9D3F4E6A8B0C1D32 /* AutoISFExportManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1E5A2B9D3F4E6A8B0C1D31 /* AutoISFExportManager.swift */; };
 		7C1E5A2B9D3F4E6A8B0C1D2E /* BatteryCalendarSync.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C1E5A2B9D3F4E6A8B0C1D2F /* BatteryCalendarSync.swift */; };
 		3870FF4725EC187A0088248F /* BloodGlucose.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3870FF4225EC13F40088248F /* BloodGlucose.swift */; };
 		3871F38725ED661C0013ECB5 /* Suggestion.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3871F38625ED661C0013ECB5 /* Suggestion.swift */; };
@@ -830,6 +831,7 @@
 		3862CC04273D152B00BF832C /* CalibrationService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationService.swift; sourceTree = "<group>"; };
 		3862CC1E273FDC9200BF832C /* CalibrationsChart.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalibrationsChart.swift; sourceTree = "<group>"; };
 		3862CC2D2743F9F700BF832C /* CalendarManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarManager.swift; sourceTree = "<group>"; };
+		7C1E5A2B9D3F4E6A8B0C1D31 /* AutoISFExportManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AutoISFExportManager.swift; sourceTree = "<group>"; };
 		7C1E5A2B9D3F4E6A8B0C1D2F /* BatteryCalendarSync.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BatteryCalendarSync.swift; sourceTree = "<group>"; };
 		3870FF4225EC13F40088248F /* BloodGlucose.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = BloodGlucose.swift; sourceTree = "<group>"; };
 		3871F38625ED661C0013ECB5 /* Suggestion.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Suggestion.swift; sourceTree = "<group>"; };
@@ -1724,6 +1726,7 @@
 				38E8754D275556E100975559 /* WatchManager */,
 				38E87406274F9AA500975559 /* UserNotifiactions */,
 				3862CC2C2743F9DC00BF832C /* Calendar */,
+				7C1E5A2B9D3F4E6A8B0C1D30 /* AutoISFExport */,
 				38AEE75025F021F10013F05B /* SettingsManager */,
 				38B4F3C425E5016800E76A18 /* Notifications */,
 				3811DE9225C9D88200A708ED /* Appearance */,
@@ -1732,6 +1735,14 @@
 				3811DEA525C9D88300A708ED /* UnlockManager */,
 			);
 			path = Services;
+			sourceTree = "<group>";
+		};
+		7C1E5A2B9D3F4E6A8B0C1D30 /* AutoISFExport */ = {
+			isa = PBXGroup;
+			children = (
+				7C1E5A2B9D3F4E6A8B0C1D31 /* AutoISFExportManager.swift */,
+			);
+			path = AutoISFExport;
 			sourceTree = "<group>";
 		};
 		3811DE9225C9D88200A708ED /* Appearance */ = {
@@ -3171,6 +3182,7 @@
 				F273F9602DE73ABE00BF0FFC /* IOBTick0.swift in Sources */,
 				195D80B72AF697B800D25097 /* DynamicDataFlow.swift in Sources */,
 				3862CC2E2743F9F700BF832C /* CalendarManager.swift in Sources */,
+				7C1E5A2B9D3F4E6A8B0C1D32 /* AutoISFExportManager.swift in Sources */,
 				7C1E5A2B9D3F4E6A8B0C1D2E /* BatteryCalendarSync.swift in Sources */,
 				CEA4F62329BE10F70011ADF7 /* SavitzkyGolayFilter.swift in Sources */,
 				38B4F3C325E2A20B00E76A18 /* PumpSetupView.swift in Sources */,

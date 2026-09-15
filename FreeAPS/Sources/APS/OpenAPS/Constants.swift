@@ -71,6 +71,7 @@ extension OpenAPS {
         static let alertHistory = "monitor/alerthistory.json"
         static let statistics = "monitor/statistics.json"
         static let orangeLinkBattery = "monitor/orangelink-battery.json"
+        static let loopReasonHistory = "monitor/loop-reason-history.json"
         static let pumpBatteryLog = "monitor/pump-battery-log.json"
     }
 

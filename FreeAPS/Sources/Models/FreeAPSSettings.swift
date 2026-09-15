@@ -133,6 +133,9 @@ struct FreeAPSSettings: JSON, Equatable {
     var ketoProtectBasalPercent: Decimal = 20
     var ketoProtectAbsolut: Bool = false
     var ketoProtectBasalAbsolut: Decimal = 0
+    /// Daily Auto ISF history export to a Relayboard workspace.
+    var autoISFDailyExport: Bool = false
+    var relayboardURL: String = "http://10.0.0.156:8787"
     // 1-min loops
     var allowOneMinuteLoop: Bool = false // allow running loops every minute
     var allowOneMinuteGlucose: Bool = false // allow sending 1-minute readings to oref, even if loops are with 5-minute intervals
@@ -642,6 +645,14 @@ extension FreeAPSSettings: Decodable {
         // Auto ISF Keto Protection
         if let ketoProtectBasalAbsolut = try? container.decode(Decimal.self, forKey: .ketoProtectBasalAbsolut) {
             settings.ketoProtectBasalAbsolut = ketoProtectBasalAbsolut
+        }
+
+        if let autoISFDailyExport = try? container.decode(Bool.self, forKey: .autoISFDailyExport) {
+            settings.autoISFDailyExport = autoISFDailyExport
+        }
+
+        if let relayboardURL = try? container.decode(String.self, forKey: .relayboardURL) {
+            settings.relayboardURL = relayboardURL
         }
 
         if let ketoProtect = try? container.decode(Bool.self, forKey: .ketoProtect) {

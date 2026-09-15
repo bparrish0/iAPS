@@ -458,6 +458,38 @@ extension AutoISF {
                             Text(">").foregroundStyle(.secondary)
                         }.onTapGesture { presentHistory.toggle() }
                     } header: { Text("History") }
+
+                    Section {
+                        Toggle("Post history to Relayboard daily", isOn: $state.autoISFDailyExport)
+                        HStack {
+                            Text("Relayboard URL")
+                            Spacer()
+                            TextField("http://10.0.0.156:8787", text: $state.relayboardURL)
+                                .multilineTextAlignment(.trailing)
+                                .keyboardType(.URL)
+                                .textInputAutocapitalization(.never)
+                                .disableAutocorrection(true)
+                                .disabled(isPresented)
+                        }
+                        Button { state.exportNow() } label: {
+                            Text("Post now (today and yesterday)")
+                        }
+                        .disabled(isPresented)
+                        if !state.exportStatus.isEmpty {
+                            HStack {
+                                Text("Last post")
+                                Spacer()
+                                Text(state.exportStatus)
+                                    .font(.footnote)
+                                    .foregroundStyle(.secondary)
+                                    .multilineTextAlignment(.trailing)
+                            }
+                        }
+                    } header: { Text("Share history") } footer: {
+                        Text(
+                            "Posts every loop cycle's Auto ISF ratio, adjustments, insulin decisions and full reason text, plus a snapshot of these settings, to a Relayboard workspace named \"iAPS / Auto ISF History\" — one note per day, the first loop after midnight. Reachable on home Wi-Fi or over Tailscale."
+                        )
+                    }
                 }
             }
             .blur(radius: isPresented ? 5 : 0)
