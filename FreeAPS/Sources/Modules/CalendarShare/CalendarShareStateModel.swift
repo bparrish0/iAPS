@@ -19,52 +19,54 @@ extension CalendarShare {
         @Published var currentCalendarID: String = ""
         @Persisted(key: "CalendarManager.currentCalendarID") var storedCalendarID: String? = nil
 
-        /// Insulin-remaining expiration event (batteries are configured on their own screens).
-        @Published var insulinCalendarEnabled = false
-        @Published var insulinCalendarID = ""
-        @Published var insulinCalendars: [BatteryCalendarChoice] = []
+        /// Expiration events (insulin reservoir, CGM sensor). Batteries are configured on their
+        /// own detail screens but share the same service and calendar list.
+        @Published var expirationEnabled: [CalendarExpirationItem: Bool] = [:]
+        @Published var expirationCalendarID: [CalendarExpirationItem: String] = [:]
+        @Published var expirationCalendars: [BatteryCalendarChoice] = []
 
-        /// Turn the insulin reservoir-empty calendar event on or off. Turning it on asks for
-        /// calendar access (first time), loads the calendar list, preselects a calendar, and
-        /// creates the event from the latest estimate; turning it off deletes the event.
-        func setInsulinCalendarEnabled(_ enabled: Bool) {
-            insulinCalendarEnabled = enabled
+        /// Turn one item's calendar event on or off. Turning it on asks for calendar access
+        /// (first time), loads the calendar list, preselects a calendar, and creates the event;
+        /// turning it off deletes the event.
+        func setExpirationEnabled(_ enabled: Bool, for item: CalendarExpirationItem) {
+            expirationEnabled[item] = enabled
             guard enabled else {
-                batteryCalendarSync.setInsulinEnabled(false, calendarIdentifier: batteryCalendarSync.insulinCalendarIdentifier())
-                batteryCalendarSync.resyncInsulin()
+                batteryCalendarSync.setEnabled(false, calendarIdentifier: batteryCalendarSync.calendarIdentifier(item), for: item)
+                batteryCalendarSync.resync(item)
                 return
             }
             batteryCalendarSync.requestAccessIfNeeded()
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] granted in
                     guard let self = self else { return }
-                    self.insulinCalendars = granted ? self.batteryCalendarSync.availableCalendars() : []
-                    if granted, !self.insulinCalendars.contains(where: { $0.id == self.insulinCalendarID }) {
-                        self.insulinCalendarID = self.batteryCalendarSync.suggestedCalendarIdentifier()
-                            ?? self.insulinCalendars.first?.id ?? ""
+                    self.expirationCalendars = granted ? self.batteryCalendarSync.availableCalendars() : []
+                    let current = self.expirationCalendarID[item] ?? ""
+                    if granted, !self.expirationCalendars.contains(where: { $0.id == current }) {
+                        self.expirationCalendarID[item] = self.batteryCalendarSync.suggestedCalendarIdentifier()
+                            ?? self.expirationCalendars.first?.id ?? ""
                     }
-                    self.batteryCalendarSync.setInsulinEnabled(
-                        true,
-                        calendarIdentifier: self.insulinCalendarID.isEmpty ? nil : self.insulinCalendarID
-                    )
-                    self.batteryCalendarSync.resyncInsulin()
+                    let id = self.expirationCalendarID[item] ?? ""
+                    self.batteryCalendarSync.setEnabled(true, calendarIdentifier: id.isEmpty ? nil : id, for: item)
+                    self.batteryCalendarSync.resync(item)
                 }
                 .store(in: &lifetime)
         }
 
-        /// Move the insulin event to a different calendar.
-        func setInsulinCalendarID(_ id: String) {
-            insulinCalendarID = id
-            batteryCalendarSync.setInsulinEnabled(insulinCalendarEnabled, calendarIdentifier: id.isEmpty ? nil : id)
-            batteryCalendarSync.resyncInsulin()
+        /// Move one item's event to a different calendar.
+        func setExpirationCalendarID(_ id: String, for item: CalendarExpirationItem) {
+            expirationCalendarID[item] = id
+            batteryCalendarSync.setEnabled(expirationEnabled[item] ?? false, calendarIdentifier: id.isEmpty ? nil : id, for: item)
+            batteryCalendarSync.resync(item)
         }
 
         override func subscribe() {
             currentCalendarID = storedCalendarID ?? ""
             calendarIDs = calendarManager.calendarIDs()
-            insulinCalendarEnabled = batteryCalendarSync.isInsulinEnabled()
-            insulinCalendarID = batteryCalendarSync.insulinCalendarIdentifier() ?? ""
-            insulinCalendars = batteryCalendarSync.availableCalendars()
+            for item in CalendarExpirationItem.allCases {
+                expirationEnabled[item] = batteryCalendarSync.isEnabled(item)
+                expirationCalendarID[item] = batteryCalendarSync.calendarIdentifier(item) ?? ""
+            }
+            expirationCalendars = batteryCalendarSync.availableCalendars()
 
             subscribeSetting(\.useCalendar, on: $createCalendarEvents) { createCalendarEvents = $0 }
             subscribeSetting(\.displayCalendarIOBandCOB, on: $displayCalendarIOBandCOB) { displayCalendarIOBandCOB = $0 }

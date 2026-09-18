@@ -11,10 +11,13 @@ struct BatteryCalendarChoice: Identifiable, Equatable {
 
 /// Which expiring thing a calendar event tracks. Raw values double as the persisted-key
 /// segment, so the battery keys stay what earlier builds wrote.
-enum CalendarExpirationItem: String, CaseIterable {
+enum CalendarExpirationItem: String, CaseIterable, Identifiable {
     case pumpBattery = "pump"
     case orangeLinkBattery = "orangeLink"
     case insulin
+    case cgmSensor = "sensor"
+
+    var id: String { rawValue }
 
     init(_ kind: BatteryDeviceKind) {
         switch kind {
@@ -31,6 +34,8 @@ enum CalendarExpirationItem: String, CaseIterable {
             return NSLocalizedString("OrangeLink battery empty (est.)", comment: "Calendar event title")
         case .insulin:
             return NSLocalizedString("Insulin reservoir empty (est.)", comment: "Calendar event title")
+        case .cgmSensor:
+            return NSLocalizedString("CGM sensor expires", comment: "Calendar event title")
         }
     }
 
@@ -46,6 +51,11 @@ enum CalendarExpirationItem: String, CaseIterable {
                 "Estimated by iAPS from the reservoir level and average daily insulin use. This event moves as the estimate changes.",
                 comment: "Calendar event notes"
             )
+        case .cgmSensor:
+            return NSLocalizedString(
+                "From the sensor session start reported by the CGM and the session length iAPS uses for the sensor countdown.",
+                comment: "Calendar event notes"
+            )
         }
     }
 
@@ -53,41 +63,51 @@ enum CalendarExpirationItem: String, CaseIterable {
     /// contact, so it drifts by a few minutes each cycle; only real movement rewrites its event.
     var moveTolerance: TimeInterval {
         switch self {
-        case .pumpBattery, .orangeLinkBattery: return 60
+        case .pumpBattery, .orangeLinkBattery, .cgmSensor: return 60
         case .insulin: return 30 * 60
         }
     }
 }
 
-/// Mirrors each battery's estimated-empty time, and the insulin reservoir's, into a
-/// user-chosen calendar as a single event per item, moving that event whenever the estimate
-/// changes and removing it when the feature is switched off or the estimate disappears.
+/// Mirrors each expiring item's end time — pump battery, OrangeLink battery, insulin reservoir,
+/// CGM sensor — into a user-chosen calendar as a single event per item, moving that event
+/// whenever the estimate changes and removing it when the item is switched off or has no
+/// estimate.
 protocol BatteryCalendarSync {
-    func isEnabled(_ kind: BatteryDeviceKind) -> Bool
-    func calendarIdentifier(_ kind: BatteryDeviceKind) -> String?
-    func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for kind: BatteryDeviceKind)
-    /// Bring the calendar event for this battery in line with its persisted log.
-    func sync(_ kind: BatteryDeviceKind)
-
-    func isInsulinEnabled() -> Bool
-    func insulinCalendarIdentifier() -> String?
-    func setInsulinEnabled(_ enabled: Bool, calendarIdentifier: String?)
-    /// Bring the insulin event in line with the latest estimate (nil removes it).
+    func isEnabled(_ item: CalendarExpirationItem) -> Bool
+    func calendarIdentifier(_ item: CalendarExpirationItem) -> String?
+    func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for item: CalendarExpirationItem)
+    /// Recompute this item's expiration from its source and bring its event in line.
+    func resync(_ item: CalendarExpirationItem)
+    /// The insulin estimate lives in the Home model; it pushes each new value here (nil removes
+    /// the event). `resync(.insulin)` re-applies the last value pushed.
     func syncInsulin(expiration: Date?)
-    /// Re-apply the insulin settings using the last estimate seen (after a toggle or calendar change).
-    func resyncInsulin()
 
     /// Writable calendars on the device, or empty when calendar access hasn't been granted.
     func availableCalendars() -> [BatteryCalendarChoice]
-    /// The calendar to preselect when the user first turns the feature on.
+    /// The calendar to preselect when the user first turns an item on.
     func suggestedCalendarIdentifier() -> String?
     func requestAccessIfNeeded() -> AnyPublisher<Bool, Never>
+}
+
+/// Battery-kind conveniences for the battery detail screens.
+extension BatteryCalendarSync {
+    func isEnabled(_ kind: BatteryDeviceKind) -> Bool { isEnabled(CalendarExpirationItem(kind)) }
+    func calendarIdentifier(_ kind: BatteryDeviceKind) -> String? { calendarIdentifier(CalendarExpirationItem(kind)) }
+    func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for kind: BatteryDeviceKind) {
+        setEnabled(enabled, calendarIdentifier: calendarIdentifier, for: CalendarExpirationItem(kind))
+    }
+
+    func sync(_ kind: BatteryDeviceKind) { resync(CalendarExpirationItem(kind)) }
 }
 
 final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
     @Injected() private var storage: FileStorage!
     @Injected() private var broadcaster: Broadcaster!
     @Injected() private var calendarManager: CalendarManager!
+    @Injected() private var glucoseStorage: GlucoseStorage!
+    @Injected() private var settingsManager: SettingsManager!
+    @Injected() private var appCoordinator: AppCoordinator!
 
     /// Same store and encoding as `@Persisted`, keyed per item so the battery keys written by
     /// earlier builds keep working.
@@ -104,12 +124,16 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
     init(resolver: Resolver) {
         injectServices(resolver)
         broadcaster.register(PumpBatteryObserver.self, observer: self)
+        broadcaster.register(GlucoseObserver.self, observer: self)
         Foundation.NotificationCenter.default.publisher(for: .orangeLinkBatteryUpdated)
-            .sink { [weak self] _ in self?.sync(.orangeLink) }
+            .sink { [weak self] _ in self?.resync(.orangeLinkBattery) }
             .store(in: &lifetime)
-        sync(.pump)
-        sync(.orangeLink)
-        syncInsulin(expiration: defaults.getValue(Date.self, forKey: Self.insulinExpirationKey))
+        appCoordinator.$sensorDays
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in self?.resync(.cgmSensor) }
+            .store(in: &lifetime)
+        CalendarExpirationItem.allCases.forEach(resync)
     }
 
     // MARK: - Settings
@@ -118,15 +142,15 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
         "BatteryCalendar.\(item.rawValue).\(field)"
     }
 
-    private func isEnabled(_ item: CalendarExpirationItem) -> Bool {
+    func isEnabled(_ item: CalendarExpirationItem) -> Bool {
         defaults.getValue(Bool.self, forKey: key(item, "enabled")) ?? false
     }
 
-    private func calendarIdentifier(_ item: CalendarExpirationItem) -> String? {
+    func calendarIdentifier(_ item: CalendarExpirationItem) -> String? {
         defaults.getValue(String.self, forKey: key(item, "calendarID"))
     }
 
-    private func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for item: CalendarExpirationItem) {
+    func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for item: CalendarExpirationItem) {
         defaults.setValue(enabled, forKey: key(item, "enabled"))
         defaults.setValue(calendarIdentifier, forKey: key(item, "calendarID"))
     }
@@ -137,18 +161,6 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
 
     private func setEventIdentifier(_ id: String?, for item: CalendarExpirationItem) {
         defaults.setValue(id, forKey: key(item, "eventID"))
-    }
-
-    func isEnabled(_ kind: BatteryDeviceKind) -> Bool { isEnabled(CalendarExpirationItem(kind)) }
-    func calendarIdentifier(_ kind: BatteryDeviceKind) -> String? { calendarIdentifier(CalendarExpirationItem(kind)) }
-    func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for kind: BatteryDeviceKind) {
-        setEnabled(enabled, calendarIdentifier: calendarIdentifier, for: CalendarExpirationItem(kind))
-    }
-
-    func isInsulinEnabled() -> Bool { isEnabled(.insulin) }
-    func insulinCalendarIdentifier() -> String? { calendarIdentifier(.insulin) }
-    func setInsulinEnabled(_ enabled: Bool, calendarIdentifier: String?) {
-        setEnabled(enabled, calendarIdentifier: calendarIdentifier, for: .insulin)
     }
 
     // MARK: - Calendar access
@@ -199,34 +211,50 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
 
     // MARK: - Sync
 
-    func sync(_ kind: BatteryDeviceKind) {
+    func resync(_ item: CalendarExpirationItem) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            let log = self.storage.retrieve(kind.storageFile, as: BatteryDischargeLog.self)
-            var notes = [CalendarExpirationItem(kind).notesIntro]
+            let (expiration, notes) = self.expiration(for: item)
+            self.upsert(item, expiration: expiration, notes: notes)
+        }
+    }
+
+    func syncInsulin(expiration: Date?) {
+        defaults.setValue(expiration, forKey: Self.insulinExpirationKey)
+        resync(.insulin)
+    }
+
+    /// Each item's current end time and the event notes explaining it.
+    private func expiration(for item: CalendarExpirationItem) -> (Date?, String) {
+        var notes = [item.notesIntro]
+        switch item {
+        case .pumpBattery, .orangeLinkBattery:
+            let kind: BatteryDeviceKind = item == .pumpBattery ? .pump : .orangeLink
+            let log = storage.retrieve(kind.storageFile, as: BatteryDischargeLog.self)
             if let log = log, let installed = log.replacementDate, log.cycleIsLearnable {
                 notes.append(String(
                     format: NSLocalizedString("Installed: %@", comment: "Calendar event notes"),
                     Self.noteDateFormatter.string(from: installed)
                 ))
             }
-            self.upsert(
-                CalendarExpirationItem(kind),
-                expiration: log?.currentExpirationDate,
-                notes: notes.joined(separator: "\n")
-            )
-        }
-    }
+            return (log?.currentExpirationDate, notes.joined(separator: "\n"))
 
-    func syncInsulin(expiration: Date?) {
-        defaults.setValue(expiration, forKey: Self.insulinExpirationKey)
-        queue.async { [weak self] in
-            self?.upsert(.insulin, expiration: expiration, notes: CalendarExpirationItem.insulin.notesIntro)
-        }
-    }
+        case .insulin:
+            return (defaults.getValue(Date.self, forKey: Self.insulinExpirationKey), notes.joined(separator: "\n"))
 
-    func resyncInsulin() {
-        syncInsulin(expiration: defaults.getValue(Date.self, forKey: Self.insulinExpirationKey))
+        case .cgmSensor:
+            // Same inputs as the header's sensor countdown: the latest reading's session start
+            // and the plugin's session length (or the settings fallback).
+            guard let start = glucoseStorage.retrieveRaw().last(where: { $0.sessionStartDate != nil })?.sessionStartDate
+            else { return (nil, notes.joined(separator: "\n")) }
+            let days = appCoordinator.sensorDays ?? settingsManager.settings.sensorDays
+            notes.append(String(
+                format: NSLocalizedString("Session started: %@ · %@-day session", comment: "Calendar event notes"),
+                Self.noteDateFormatter.string(from: start),
+                Self.daysFormatter.string(from: days as NSNumber) ?? "\(days)"
+            ))
+            return (start.addingTimeInterval(days * 86400), notes.joined(separator: "\n"))
+        }
     }
 
     /// Create, move, or remove the single event for `item` so it matches `expiration`.
@@ -304,10 +332,20 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
         formatter.timeStyle = .short
         return formatter
     }
+
+    private static var daysFormatter: NumberFormatter {
+        let formatter = NumberFormatter()
+        formatter.maximumFractionDigits = 1
+        return formatter
+    }
 }
 
-extension BaseBatteryCalendarSync: PumpBatteryObserver {
+extension BaseBatteryCalendarSync: PumpBatteryObserver, GlucoseObserver {
     func pumpBatteryDidChange(_: Battery) {
-        sync(.pump)
+        resync(.pumpBattery)
+    }
+
+    func glucoseDidUpdate(_: [BloodGlucose]) {
+        resync(.cgmSensor)
     }
 }
