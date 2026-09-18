@@ -487,7 +487,7 @@ extension AutoISF {
                         }
                     } header: { Text("Share history") } footer: {
                         Text(
-                            "Posts every loop cycle's Auto ISF ratio, adjustments, insulin decisions and full reason text, plus a snapshot of these settings, to a Relayboard workspace named \"iAPS / Auto ISF History\" — one note per day, the first loop after midnight. Reachable on home Wi-Fi or over Tailscale."
+                            "Posts every loop cycle's Auto ISF ratio, adjustments, insulin decisions and full reason text, plus a snapshot of these settings, to a Relayboard workspace named \"iAPS / Auto ISF History\" — one note per day, the first loop after midnight. Reachable on home Wi-Fi or over Tailscale. On Wi-Fi, iOS asks once for Local Network access; tap Allow, or posts fail until you do."
                         )
                     }
                 }

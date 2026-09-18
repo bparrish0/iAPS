@@ -39,6 +39,40 @@ extension CalendarShare {
                             }
                         }
                     }
+
+                    Section(
+                        header: Text("Insulin remaining"),
+                        footer: Text(
+                            "Puts the estimated reservoir-empty time in a calendar, with an alert, and moves it as the estimate changes. Pump and OrangeLink battery events are set up on their battery screens."
+                        )
+                    ) {
+                        Toggle(
+                            "Add estimate to Calendar",
+                            isOn: Binding(
+                                get: { state.insulinCalendarEnabled },
+                                set: { state.setInsulinCalendarEnabled($0) }
+                            )
+                        )
+                        if state.insulinCalendarEnabled {
+                            if state.insulinCalendars.isNotEmpty {
+                                Picker(
+                                    "Calendar",
+                                    selection: Binding(
+                                        get: { state.insulinCalendarID },
+                                        set: { state.setInsulinCalendarID($0) }
+                                    )
+                                ) {
+                                    ForEach(state.insulinCalendars) { choice in
+                                        Text(choice.title).tag(choice.id)
+                                    }
+                                }
+                            } else {
+                                Text(
+                                    "If you are not seeing calendars to choose here, please go to Settings -> iAPS -> Calendars and change permissions to \"Full Access\""
+                                ).font(.footnote)
+                            }
+                        }
+                    }
                 }
                 .dynamicTypeSize(...DynamicTypeSize.xxLarge)
                 .navigationTitle("Calendar")

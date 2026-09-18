@@ -802,6 +802,7 @@ extension Home {
                   reservoir > 0
             else {
                 DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = nil }
+                batteryCalendarSync.syncInsulin(expiration: nil)
                 return
             }
             // Pump history events are concentration-adjusted before being saved (see
@@ -816,6 +817,7 @@ extension Home {
             let hoursRemaining = Double(truncating: (realReservoir / unitsPerHour) as NSDecimalNumber)
             let expiration = Date().addingTimeInterval(hoursRemaining * 3600)
             DispatchQueue.main.async { [weak self] in self?.insulinExpirationDate = expiration }
+            batteryCalendarSync.syncInsulin(expiration: expiration)
         }
 
         private func latestStoredTDD() -> Decimal? {
