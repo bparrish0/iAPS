@@ -84,6 +84,16 @@ extension CalendarShare {
                             "If you are not seeing calendars to choose here, please go to Settings -> iAPS -> Calendars and change permissions to \"Full Access\""
                         ).font(.footnote)
                     }
+                    if let status = state.expirationStatus[item], !status.isEmpty {
+                        HStack {
+                            Text("Status")
+                            Spacer()
+                            Text(status)
+                                .font(.footnote)
+                                .foregroundStyle(.secondary)
+                                .multilineTextAlignment(.trailing)
+                        }
+                    }
                 }
             }
         }

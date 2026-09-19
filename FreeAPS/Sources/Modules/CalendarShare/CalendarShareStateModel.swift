@@ -24,6 +24,13 @@ extension CalendarShare {
         @Published var expirationEnabled: [CalendarExpirationItem: Bool] = [:]
         @Published var expirationCalendarID: [CalendarExpirationItem: String] = [:]
         @Published var expirationCalendars: [BatteryCalendarChoice] = []
+        @Published var expirationStatus: [CalendarExpirationItem: String] = [:]
+
+        private func refreshExpirationStatus() {
+            for item in CalendarExpirationItem.allCases {
+                expirationStatus[item] = batteryCalendarSync.lastStatus(item)
+            }
+        }
 
         /// Turn one item's calendar event on or off. Turning it on asks for calendar access
         /// (first time), loads the calendar list, preselects a calendar, and creates the event;
@@ -67,6 +74,11 @@ extension CalendarShare {
                 expirationCalendarID[item] = batteryCalendarSync.calendarIdentifier(item) ?? ""
             }
             expirationCalendars = batteryCalendarSync.availableCalendars()
+            refreshExpirationStatus()
+            Foundation.NotificationCenter.default.publisher(for: .expirationCalendarSynced)
+                .receive(on: DispatchQueue.main)
+                .sink { [weak self] _ in self?.refreshExpirationStatus() }
+                .store(in: &lifetime)
 
             subscribeSetting(\.useCalendar, on: $createCalendarEvents) { createCalendarEvents = $0 }
             subscribeSetting(\.displayCalendarIOBandCOB, on: $displayCalendarIOBandCOB) { displayCalendarIOBandCOB = $0 }

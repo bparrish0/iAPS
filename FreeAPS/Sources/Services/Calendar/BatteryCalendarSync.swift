@@ -83,6 +83,9 @@ protocol BatteryCalendarSync {
     /// the event). `resync(.insulin)` re-applies the last value pushed.
     func syncInsulin(expiration: Date?)
 
+    /// What the last sync for this item computed and did, for display under its toggle.
+    func lastStatus(_ item: CalendarExpirationItem) -> String?
+
     /// Writable calendars on the device, or empty when calendar access hasn't been granted.
     func availableCalendars() -> [BatteryCalendarChoice]
     /// The calendar to preselect when the user first turns an item on.
@@ -153,6 +156,16 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
     func setEnabled(_ enabled: Bool, calendarIdentifier: String?, for item: CalendarExpirationItem) {
         defaults.setValue(enabled, forKey: key(item, "enabled"))
         defaults.setValue(calendarIdentifier, forKey: key(item, "calendarID"))
+    }
+
+    func lastStatus(_ item: CalendarExpirationItem) -> String? {
+        defaults.getValue(String.self, forKey: key(item, "status"))
+    }
+
+    /// Record the outcome of a sync and tell the settings screen to refresh.
+    private func setStatus(_ status: String, for item: CalendarExpirationItem) {
+        defaults.setValue(status, forKey: key(item, "status"))
+        Foundation.NotificationCenter.default.post(name: .expirationCalendarSynced, object: nil)
     }
 
     private func eventIdentifier(_ item: CalendarExpirationItem) -> String? {
@@ -245,7 +258,10 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
         case .cgmSensor:
             // Same inputs as the header's sensor countdown: the latest reading's session start
             // and the plugin's session length (or the settings fallback).
-            guard let start = glucoseStorage.retrieveRaw().last(where: { $0.sessionStartDate != nil })?.sessionStartDate
+            guard let start = glucoseStorage.retrieveRaw()
+                .filter({ $0.sessionStartDate != nil })
+                .max(by: { $0.dateString < $1.dateString })?
+                .sessionStartDate
             else { return (nil, notes.joined(separator: "\n")) }
             let days = appCoordinator.sensorDays ?? settingsManager.settings.sensorDays
             notes.append(String(
@@ -259,14 +275,24 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
 
     /// Create, move, or remove the single event for `item` so it matches `expiration`.
     private func upsert(_ item: CalendarExpirationItem, expiration: Date?, notes: String) {
-        guard hasAccess else { return }
+        guard hasAccess else {
+            setStatus(NSLocalizedString("No calendar access", comment: "Expiration calendar status"), for: item)
+            return
+        }
 
-        let calendar = isEnabled(item)
-            ? calendarIdentifier(item).flatMap { eventStore.calendar(withIdentifier: $0) }
-            : nil
-
-        guard let calendar = calendar, let expiration = expiration else {
+        guard isEnabled(item) else {
             removeEvent(for: item)
+            setStatus(NSLocalizedString("Off", comment: "Expiration calendar status"), for: item)
+            return
+        }
+        guard let calendar = calendarIdentifier(item).flatMap({ eventStore.calendar(withIdentifier: $0) }) else {
+            removeEvent(for: item)
+            setStatus(NSLocalizedString("Calendar not found — pick one", comment: "Expiration calendar status"), for: item)
+            return
+        }
+        guard let expiration = expiration else {
+            removeEvent(for: item)
+            setStatus(NSLocalizedString("No estimate available yet", comment: "Expiration calendar status"), for: item)
             return
         }
 
@@ -285,7 +311,10 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
         if let existing = event {
             let moved = abs(existing.startDate.timeIntervalSince(start)) > item.moveTolerance
                 || abs(existing.endDate.timeIntervalSince(end)) > item.moveTolerance
-            guard moved || existing.title != title || existing.notes != notes else { return }
+            guard moved || existing.title != title || existing.notes != notes else {
+                setStatus(Self.eventStatus(existing), for: item)
+                return
+            }
             existing.title = title
             existing.notes = notes
             existing.startDate = start
@@ -309,8 +338,13 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
             try eventStore.save(event, span: .thisEvent, commit: true)
             setEventIdentifier(event.eventIdentifier, for: item)
             debug(.service, "Expiration calendar: \(action) \(item.rawValue) event at \(event.startDate)")
+            setStatus(Self.eventStatus(event), for: item)
         } catch {
             warning(.service, "Expiration calendar: cannot \(action) \(item.rawValue) event", error: error)
+            setStatus(
+                String(format: NSLocalizedString("Failed: %@", comment: "Expiration calendar status"), error.localizedDescription),
+                for: item
+            )
         }
     }
 
@@ -324,6 +358,14 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
         } catch {
             warning(.service, "Expiration calendar: cannot remove \(item.rawValue) event", error: error)
         }
+    }
+
+    private static func eventStatus(_ event: EKEvent) -> String {
+        String(
+            format: NSLocalizedString("Event %@ in \"%@\"", comment: "Expiration calendar status"),
+            noteDateFormatter.string(from: event.startDate),
+            event.calendar?.title ?? "?"
+        )
     }
 
     private static var noteDateFormatter: DateFormatter {
