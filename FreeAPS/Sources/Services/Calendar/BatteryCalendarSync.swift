@@ -263,13 +263,16 @@ final class BaseBatteryCalendarSync: BatteryCalendarSync, Injectable {
                 .max(by: { $0.dateString < $1.dateString })?
                 .sessionStartDate
             else { return (nil, notes.joined(separator: "\n")) }
-            let days = appCoordinator.sensorDays ?? settingsManager.settings.sensorDays
+            // The plugin reports the session length in seconds (e.g. 10.5 days for a G7); the
+            // settings fallback, used only when the plugin doesn't know, is entered in days.
+            let length: TimeInterval = appCoordinator.sensorDays ?? settingsManager.settings.sensorDays * 86400
+            let days = length / 86400
             notes.append(String(
                 format: NSLocalizedString("Session started: %@ · %@-day session", comment: "Calendar event notes"),
                 Self.noteDateFormatter.string(from: start),
                 Self.daysFormatter.string(from: days as NSNumber) ?? "\(days)"
             ))
-            return (start.addingTimeInterval(days * 86400), notes.joined(separator: "\n"))
+            return (start.addingTimeInterval(length), notes.joined(separator: "\n"))
         }
     }
 
