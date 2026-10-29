@@ -15,6 +15,7 @@ protocol APSManager {
     var lastLoopDate: Date { get }
     var lastLoopDateSubject: PassthroughSubject<Date, Never> { get }
     var bolusProgress: CurrentValueSubject<Decimal?, Never> { get }
+    var bolusDeliveredUnits: CurrentValueSubject<Decimal?, Never> { get }
     var pumpExpiresAtDate: CurrentValueSubject<Date?, Never> { get }
     var isManualTempBasal: Bool { get }
     var bolusAmount: CurrentValueSubject<Decimal?, Never> { get }
@@ -110,6 +111,7 @@ final class BaseAPSManager: APSManager, Injectable {
     let lastLoopDateSubject = PassthroughSubject<Date, Never>()
     let lastError = CurrentValueSubject<Error?, Never>(nil)
     let bolusProgress = CurrentValueSubject<Decimal?, Never>(nil)
+    let bolusDeliveredUnits = CurrentValueSubject<Decimal?, Never>(nil)
     let bolusAmount = CurrentValueSubject<Decimal?, Never>(nil)
 
     var pumpDisplayState: CurrentValueSubject<PumpDisplayState?, Never> {
@@ -499,6 +501,7 @@ final class BaseAPSManager: APSManager, Injectable {
             self.bolusReporter?.removeObserver(self)
             self.bolusReporter = nil
             self.bolusProgress.send(nil)
+            self.bolusDeliveredUnits.send(nil)
         } receiveValue: { _ in }
             .store(in: &lifetime)
     }
@@ -1379,14 +1382,25 @@ final class BaseAPSManager: APSManager, Injectable {
     private func createBolusReporter() {
         bolusReporter = pumpManager?.createBolusProgressReporter(reportingOn: processQueue)
         bolusReporter?.addObserver(self)
+        if let progress = bolusReporter?.progress, !progress.isComplete {
+            publishBolusDelivery(progress)
+        } else {
+            bolusDeliveredUnits.send(nil)
+        }
     }
 
     private func clearBolusReporter() {
         bolusReporter?.removeObserver(self)
         bolusReporter = nil
+        bolusDeliveredUnits.send(nil)
         processQueue.asyncAfter(deadline: .now() + 0.5) {
             self.bolusProgress.send(nil)
         }
+    }
+
+    private func publishBolusDelivery(_ progress: DoseProgress) {
+        let units = progress.deliveredUnits * concentration.concentration
+        bolusDeliveredUnits.send(units.isFinite && units >= 0 ? Decimal(units) : nil)
     }
 }
 
@@ -1489,8 +1503,11 @@ extension BaseAPSManager: PumpManagerStatusObserver {
 
 extension BaseAPSManager: DoseProgressObserver {
     func doseProgressReporterDidUpdate(_ doseProgressReporter: DoseProgressReporter) {
-        bolusProgress.send(Decimal(doseProgressReporter.progress.percentComplete))
-        if doseProgressReporter.progress.isComplete {
+        guard bolusReporter === doseProgressReporter else { return }
+        let progress = doseProgressReporter.progress
+        bolusProgress.send(Decimal(progress.percentComplete))
+        publishBolusDelivery(progress)
+        if progress.isComplete {
             clearBolusReporter()
         }
     }

@@ -1,5 +1,7 @@
 APP_DISPLAY_NAME = iAPS
 APP_VERSION = 8.0.4
+// Custom fork version displayed in iAPS. APP_VERSION stays in Apple's three-part format.
+APP_CUSTOM_VERSION = 8.0.4.1
 APP_BUILD_NUMBER = 1
 COPYRIGHT_NOTICE =
 DEVELOPER_TEAM = ##TEAM_ID##

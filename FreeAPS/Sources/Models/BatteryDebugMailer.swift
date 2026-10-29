@@ -235,7 +235,8 @@ enum BatteryDebugReport {
         ================================================================
         Config: replacementLow=\(config.replacementLowThreshold) replacementHigh=\(config.replacementHighThreshold) \
         granularity=\(config.levelGranularity) defaultLifetime=\(duration(config.defaultLifetime)) \
-        defaultRange=\(config.defaultDepletedValue)–\(config.defaultFreshValue) maxCycles=\(config.maxStoredCycles)
+        defaultRange=\(config.defaultDepletedValue)–\(config.defaultFreshValue) maxCycles=\(config.maxStoredCycles) \
+        startupRecoveryWindow=\(duration(config.startupRecoveryWindow))
         """
 
         guard let log = log else {
@@ -301,7 +302,7 @@ enum BatteryDebugReport {
 
     private static func appVersion() -> String {
         let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let version = Bundle.main.releaseVersionNumber ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(version) (\(build))"
     }

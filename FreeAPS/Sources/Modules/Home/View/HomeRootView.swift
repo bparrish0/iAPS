@@ -21,6 +21,11 @@ extension Home {
         @State var showBolusActiveAlert = false
         @State var displayAutoHistory = false
         @State var displayDynamicHistory = false
+        @State private var isChartPanningEnabled = true
+        @State private var inspectedGlucose: BloodGlucose?
+        @State private var duoPosture = DuoTentPosture()
+        @State private var tentLayoutFrames: [String: CGRect] = [:]
+        @AppStorage("DuoTent.mode") private var tentMode = 0
 
         let buttonFont = Font.custom("TimeButtonFont", size: 14)
         let viewPadding: CGFloat = 5
@@ -28,6 +33,7 @@ extension Home {
         @Environment(\.managedObjectContext) var moc
         @Environment(\.sizeCategory) private var fontSize
         @Environment(\.colorScheme) var colorScheme
+        @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
         @FetchRequest(
             entity: Override.entity(),
@@ -130,7 +136,8 @@ extension Home {
                 displayDelta: $state.displayDelta,
                 scrolling: $displayGlucose, displaySAGE: $state.displaySAGE,
                 displayExpiration: $state.displayExpiration,
-                sensordays: $state.sensorDays
+                sensordays: $state.sensorDays,
+                inspectedGlucose: inspectedGlucose
             )
             .onTapGesture {
                 if state.alarm == nil {
@@ -175,7 +182,8 @@ extension Home {
                 timerDate: $state.data.timerDate,
                 isLooping: $state.isLooping,
                 lastLoopDate: $state.lastLoopDate,
-                manualTempBasal: $state.manualTempBasal
+                manualTempBasal: $state.manualTempBasal,
+                showTitle: !tentActive
             )
             .onTapGesture {
                 state.isStatusPopupPresented.toggle()
@@ -270,151 +278,151 @@ extension Home {
                         .ignoresSafeArea()
                         .frame(minWidth: 0, maxWidth: .infinity, minHeight: 0, maxHeight: .infinity)
                 }
-                MainChartView(data: state.data, triggerUpdate: $triggerUpdate)
+                MainChartView(
+                    data: state.data,
+                    triggerUpdate: $triggerUpdate,
+                    isPanningEnabled: isChartPanningEnabled,
+                    inspectedGlucose: $inspectedGlucose,
+                    compactLayout: tentActive,
+                    historyOnly: true
+                )
             }
             .padding(.bottom, 5)
-            .modal(for: .dataTable, from: self)
+            .onTapGesture {
+                if isChartPanningEnabled { state.showModal(for: .dataTable) }
+            }
         }
 
-        @ViewBuilder private func buttonPanel(_ geo: GeometryProxy) -> some View {
-            ZStack {
-                addHeaderBackground()
-                    .frame(height: 50 + geo.safeAreaInsets.bottom)
-                let isOverride = fetchedPercent.first?.enabled ?? false
-                let isTarget = (state.tempTarget != nil)
-                VStack {
-                    Divider()
-                    HStack {
-                        if state.carbButton {
-                            Button { state.showModal(for: .addCarbs(editMode: false, override: false)) }
-                            label: {
-                                ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
-                                    Image(systemName: "fork.knife")
-                                        .renderingMode(.template)
-                                        .font(.custom("Buttons", size: 24))
-                                        .foregroundColor(colorScheme == .dark ? .loopYellow : .orange)
-                                        .padding(8)
-                                        .foregroundColor(.loopYellow)
-                                    if let carbsReq = state.carbsRequired {
-                                        Text(numberFormatter.string(from: carbsReq as NSNumber)!)
-                                            .font(.caption)
-                                            .foregroundColor(.white)
-                                            .padding(4)
-                                            .background(Capsule().fill(Color.red))
-                                    }
-                                }
-                            }.buttonStyle(.borderless)
-                            Spacer()
+        @ViewBuilder private var homeActionButtons: some View {
+            let isOverride = fetchedPercent.first?.enabled ?? false
+            let isTarget = state.tempTarget != nil
+            if state.carbButton {
+                Button { state.showModal(for: .addCarbs(editMode: false, override: false)) }
+                label: {
+                    ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
+                        Image(systemName: "fork.knife")
+                            .renderingMode(.template)
+                            .font(.custom("Buttons", size: 24))
+                            .foregroundColor(colorScheme == .dark ? .loopYellow : .orange)
+                            .padding(8)
+                            .foregroundColor(.loopYellow)
+                        if let carbsReq = state.carbsRequired {
+                            Text(numberFormatter.string(from: carbsReq as NSNumber)!)
+                                .font(.caption)
+                                .foregroundColor(.white)
+                                .padding(4)
+                                .background(Capsule().fill(Color.red))
                         }
-                        Button {
-                            (state.bolusProgress != nil) ? showBolusActiveAlert = true :
-                                state.showModal(for: .bolus(
-                                    waitForSuggestion: state.useCalc ? true : false,
-                                    fetch: false
-                                ))
-                        }
-                        label: {
-                            Image(systemName: "syringe")
-                                .renderingMode(.template)
-                                .font(.custom("Buttons", size: 24))
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundColor(.insulin)
-                        Spacer()
-                        if state.allowManualTemp {
-                            Button { state.showModal(for: .manualTempBasal) }
-                            label: {
-                                Image("bolus1")
-                                    .renderingMode(.template)
-                                    .resizable()
-                                    .frame(width: IAPSconfig.buttonSize, height: IAPSconfig.buttonSize, alignment: .bottom)
-                            }
-                            .foregroundColor(.insulin)
-                            Spacer()
-                        }
-                        if state.profileButton {
-                            ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
-                                Image(systemName: isOverride ? "person.fill" : "person")
-                                    .symbolRenderingMode(.palette)
-                                    .font(.custom("Buttons", size: 28))
-                                    .foregroundStyle(.purple)
-                                    .padding(8)
-                                    .background(isOverride ? .purple.opacity(0.15) : .clear)
-                                    .clipShape(RoundedRectangle(cornerRadius: 10))
-                            }
-                            .onTapGesture {
-                                if isOverride {
-                                    showCancelAlert.toggle()
-                                } else {
-                                    state.showModal(for: .overrideProfilesConfig)
-                                }
-                            }
-                            .onLongPressGesture {
-                                state.showModal(for: .overrideProfilesConfig)
-                            }
-                            Spacer()
-                        }
-                        if state.useTargetButton {
-                            Image(systemName: "target")
-                                .renderingMode(.template)
-                                .font(.custom("Buttons", size: 24))
-                                .padding(8)
-                                .foregroundColor(.loopGreen)
-                                .background(isTarget ? .green.opacity(0.15) : .clear)
-                                .clipShape(RoundedRectangle(cornerRadius: 10))
-                                .onTapGesture {
-                                    if isTarget {
-                                        showCancelTTAlert.toggle()
-                                    } else {
-                                        state.showModal(for: .addTempTarget)
-                                    }
-                                }
-                                .onLongPressGesture {
-                                    state.showModal(for: .addTempTarget)
-                                }
-                            Spacer()
-                        }
-                        Button { state.showModal(for: .settings) }
-                        label: {
-                            Image(systemName: "gear")
-                                .renderingMode(.template)
-                                .font(.custom("Buttons", size: 24))
-                        }
-                        .buttonStyle(.borderless)
-                        .foregroundColor(.gray)
                     }
-                    .padding(.horizontal, state.allowManualTemp ? 10 : 24)
-                    .padding(.bottom, geo.safeAreaInsets.bottom)
-                }
+                }.buttonStyle(.borderless)
+                    .accessibilityLabel("Carbs")
             }
-            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
-            .confirmationDialog("Cancel Profile Override", isPresented: $showCancelAlert) {
-                Button("Cancel Profile Override", role: .destructive) {
-                    state.cancelProfile()
-                    triggerUpdate.toggle()
-                }
+            Button {
+                (state.bolusProgress != nil) ? showBolusActiveAlert = true :
+                    state.showModal(for: .bolus(
+                        waitForSuggestion: state.useCalc ? true : false,
+                        fetch: false
+                    ))
             }
-            .confirmationDialog("Cancel Temporary Target", isPresented: $showCancelTTAlert) {
-                Button("Cancel Temporary Target", role: .destructive) {
-                    state.cancelTempTarget()
-                }
+            label: {
+                Image(systemName: "syringe")
+                    .renderingMode(.template)
+                    .font(.custom("Buttons", size: 24))
             }
-            .confirmationDialog("Bolus already in Progress", isPresented: $showBolusActiveAlert) {
-                Button("Bolus already in Progress!", role: .destructive) {
-                    showBolusActiveAlert = false
+            .buttonStyle(.borderless)
+            .foregroundColor(.insulin)
+            .accessibilityLabel("Bolus")
+            if state.allowManualTemp {
+                Button { state.showModal(for: .manualTempBasal) }
+                label: {
+                    Image("bolus1")
+                        .renderingMode(.template)
+                        .resizable()
+                        .frame(width: IAPSconfig.buttonSize, height: IAPSconfig.buttonSize, alignment: .bottom)
+                }
+                .foregroundColor(.insulin)
+                .accessibilityLabel("Temporary basal")
+            }
+            if state.profileButton {
+                ZStack(alignment: Alignment(horizontal: .trailing, vertical: .bottom)) {
+                    Image(systemName: isOverride ? "person.fill" : "person")
+                        .symbolRenderingMode(.palette)
+                        .font(.custom("Buttons", size: 28))
+                        .foregroundStyle(.purple)
+                        .padding(8)
+                        .background(isOverride ? .purple.opacity(0.15) : .clear)
+                        .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+                .onTapGesture {
+                    if isOverride {
+                        showCancelAlert.toggle()
+                    } else {
+                        state.showModal(for: .overrideProfilesConfig)
+                    }
+                }
+                .onLongPressGesture {
+                    state.showModal(for: .overrideProfilesConfig)
+                }
+                .accessibilityLabel("Profiles")
+                .accessibilityAddTraits(.isButton)
+            }
+            if state.useTargetButton {
+                Image(systemName: "target")
+                    .renderingMode(.template)
+                    .font(.custom("Buttons", size: 24))
+                    .padding(8)
+                    .foregroundColor(.loopGreen)
+                    .background(isTarget ? .green.opacity(0.15) : .clear)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                    .onTapGesture {
+                        if isTarget {
+                            showCancelTTAlert.toggle()
+                        } else {
+                            state.showModal(for: .addTempTarget)
+                        }
+                    }
+                    .onLongPressGesture {
+                        state.showModal(for: .addTempTarget)
+                    }
+                    .accessibilityLabel("Temporary target")
+                    .accessibilityAddTraits(.isButton)
+            }
+            Button { state.showModal(for: .settings) }
+            label: {
+                Image(systemName: "gear")
+                    .renderingMode(.template)
+                    .font(.custom("Buttons", size: 24))
+            }
+            .buttonStyle(.borderless)
+            .foregroundColor(.gray)
+            .accessibilityLabel("Settings")
+        }
+
+        @ToolbarContentBuilder private var homeToolbar: some ToolbarContent {
+            if #available(iOS 27.1, *) {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    homeActionButtons
+                }
+                .axisBehavior(.verticalPreferred)
+            } else {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    homeActionButtons
                 }
             }
         }
 
-        var chart: some View {
-            let ratio = 1.96
-            let ratio2 = 2.0
-
-            return addColouredBackground().shadow(radius: 3, y: 3)
+        private func chart(height: CGFloat) -> some View {
+            addColouredBackground().shadow(radius: 3, y: 3)
                 .overlay {
                     mainChart
                 }
-                .frame(minHeight: UIScreen.main.bounds.height / (fontSize < .extraExtraLarge ? ratio : ratio2))
+                .frame(height: height)
+                .overlay(alignment: .top) {
+                    if tentActive, let progress = state.bolusProgress, let amount = state.bolusAmount {
+                        bolusProgressPanel(progress: progress, amount: amount)
+                            .padding(.top, 8)
+                    }
+                }
         }
 
         var carbsAndInsulinView: some View {
@@ -628,6 +636,13 @@ extension Home {
             }
         }
 
+        private func bolusProgressPanel(progress: Decimal, amount: Decimal) -> some View {
+            bolusProgressView(progress: progress, amount: amount)
+                .frame(maxWidth: 320)
+                .frame(height: 90)
+                .background(.gray.opacity(0.9), in: RoundedRectangle(cornerRadius: 15))
+        }
+
         func bolusProgressView(progress: Decimal, amount: Decimal) -> some View {
             ZStack {
                 VStack {
@@ -638,7 +653,11 @@ extension Home {
                             bolused + " " + NSLocalizedString("of", comment: "") + " " + amount
                                 .formatted() + NSLocalizedString(" U", comment: "")
                         )
-                    }.frame(width: 250, height: 25).font(.bolusProgressBarFont)
+                    }
+                    .font(.bolusProgressBarFont)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+                    .frame(width: 300, height: 34)
                     HStack(alignment: .bottom, spacing: 5) {
                         ProgressView(value: Double(progress)).progressViewStyle(BolusProgressViewStyle())
                             .overlay {
@@ -795,7 +814,7 @@ extension Home {
             .buttonStyle(.borderless)
             .foregroundStyle(.primary)
             .font(.timeSettingFont)
-            .padding(.vertical, 15)
+            .padding(.vertical, tentActive ? 8 : 15)
             .background(TimeEllipse(characters: hourLabel.count))
         }
 
@@ -821,7 +840,6 @@ extension Home {
                     }
                 }
             }
-            .offset(x: 130)
         }
 
         private func enabled() -> Bool {
@@ -856,102 +874,298 @@ extension Home {
             ActivityIndicator(isAnimating: .constant(true), style: .large)
         }
 
+        private var tentActive: Bool { duoPosture.isActive(mode: tentMode) }
+
+        private var homeBackground: Color {
+            if tentActive { return .black }
+            return colorScheme == .light ? IAPSconfig.homeViewBackgroundLight : IAPSconfig.homeViewBackgrundDark
+        }
+
+        private var tentDisplayControls: some View {
+            HStack {
+                timeSetting
+                    .overlay(alignment: .topLeading) {
+                        TentIOBView(data: state.data)
+                            .offset(y: 36)
+                    }
+                chartPanButton
+                loopView
+                Spacer()
+            }
+            .font(.subheadline)
+            .padding(.trailing, 16)
+        }
+
+        private var chartPanButton: some View {
+            Button {
+                inspectedGlucose = nil
+                isChartPanningEnabled.toggle()
+            } label: {
+                Image(systemName: "arrow.up.and.down.and.arrow.left.and.right")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(isChartPanningEnabled ? Color.accentColor : Color.secondary)
+                    .frame(width: tentActive ? 36 : 44, height: tentActive ? 36 : 44)
+                    .background(isChartPanningEnabled ? Color.accentColor.opacity(0.18) : Color.clear, in: Capsule())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Scroll chart history")
+            .accessibilityValue(isChartPanningEnabled ? "On" : "Off")
+            .accessibilityHint("When off, drag on the chart to inspect glucose readings.")
+        }
+
+        private func tentReading(fontSize: CGFloat) -> some View {
+            VStack(spacing: 8) {
+                TentGlucoseView(
+                    data: state.data,
+                    recentGlucose: state.recentGlucose,
+                    inspectedGlucose: inspectedGlucose,
+                    delta: state.glucoseDelta,
+                    fontSize: fontSize
+                )
+            }
+            .frame(maxWidth: .infinity)
+        }
+
+        private func tentDashboard(_ geo: GeometryProxy, controlTopInset: CGFloat) -> some View {
+            let usableHeight = geo.size.height - geo.safeAreaInsets.top - geo.safeAreaInsets.bottom
+            // SwiftUI's content area excludes the toolbar and camera/status rail.
+            // Center the reading in the actual window instead.
+            let contentFrame = geo.frame(in: .global)
+            let centerOffset = duoPosture.windowBounds.width > 0
+                ? duoPosture.windowBounds.midX - contentFrame.midX : 0
+            let readingHeight: CGFloat = {
+                guard let controls = tentLayoutFrames["controls"], let toolbar = tentLayoutFrames["toolbar"] else {
+                    return min(220, usableHeight * 0.4)
+                }
+                return max(80, toolbar.minY - controls.maxY - 2)
+            }()
+            let readingFontSize = min(190, geo.size.width * 0.38, max(28, (readingHeight - 54) / 1.1))
+            return VStack(spacing: 1) {
+                tentDisplayControls
+                    .offset(y: controlTopInset)
+                    // Measure the original row so moving its controls below the
+                    // camera does not move the glucose or shrink the chart.
+                    .background {
+                        GeometryReader { proxy in
+                            Color.clear.preference(key: TentLayoutFramesKey.self, value: ["controls": proxy.frame(in: .global)])
+                        }
+                    }
+                tentReading(fontSize: readingFontSize)
+                    // Keep the glucose size while reclaiming the tightened header's space for the chart.
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(height: max(48, readingHeight - 32))
+                    .offset(x: centerOffset, y: -26)
+                GeometryReader { chartArea in
+                    chart(height: max(140, chartArea.size.height))
+                }
+            }
+            .padding(.horizontal, 12)
+            .padding(.top, geo.safeAreaInsets.top + 2)
+            .padding(.bottom, 2)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        }
+
+        @ViewBuilder private func dashboard(_ geo: GeometryProxy) -> some View {
+            // Use the window's current geometry so folding and window resizing work
+            // without relying on a device model or the dimensions of another display.
+            let isWide = geo.size.width >= 700
+            if isWide {
+                HStack(spacing: 0) {
+                    VStack(spacing: 0) {
+                        headerView(geo)
+                        Spacer(minLength: 0)
+                    }
+                    .frame(width: min(360, max(320, geo.size.width * 0.4)))
+                    Divider()
+                    GeometryReader { chartArea in
+                        dashboardScroll(chartHeight: max(180, chartArea.size.height - 60))
+                    }
+                    .padding(.top, geo.safeAreaInsets.top)
+                    .padding(.bottom, geo.safeAreaInsets.bottom)
+                }
+            } else {
+                VStack(spacing: 0) {
+                    headerView(geo)
+                    GeometryReader { chartArea in
+                        dashboardScroll(chartHeight: max(180, chartArea.size.height - 60))
+                    }
+                }
+            }
+        }
+
+        private func dashboardScroll(chartHeight: CGFloat) -> some View {
+            ScrollView {
+                VStack {
+                    // Main Chart
+                    chart(height: chartHeight)
+                    // Adjust hours visible (X-Axis) and ratio display
+                    HStack {
+                        Spacer(minLength: 0)
+                        timeSetting
+                        Spacer(minLength: 12)
+                        chartPanButton
+                        Spacer(minLength: 12)
+                        isfView
+                        Spacer(minLength: 0)
+                    }
+                    .padding(.horizontal, 12)
+                    // TIR Chart
+                    if !state.data.glucose.isEmpty {
+                        preview.padding(.top, 15)
+                    }
+                    // Loops Chart
+                    loopPreview.padding(.vertical, 15)
+
+                    // COB Chart
+                    if state.carbData > 0 {
+                        activeCOBView.padding(.bottom, 15)
+                    }
+
+                    // IOB Chart
+                    if !state.iobData.isEmpty {
+                        activeIOBView.padding(.bottom, 15)
+                    }
+
+                    // Summary Views
+                    insulinView.padding(.bottom, 15)
+                    mealsView.padding(.bottom, 15)
+                }
+                .background {
+                    // Track vertical scroll
+                    GeometryReader { proxy in
+                        let scrollPosition = proxy.frame(in: .named("HomeScrollView")).minY
+                        let yThreshold: CGFloat = -550
+                        Color.clear
+                            .onChange(of: scrollPosition) {
+                                if scrollPosition < yThreshold, state.iobs > 0 || state.carbData > 0,
+                                   !state.skipGlucoseChart
+                                {
+                                    withAnimation(.easeOut(duration: 0.3)) { displayGlucose = true }
+                                } else {
+                                    withAnimation(.easeOut(duration: 0.4)) { displayGlucose = false }
+                                }
+                            }
+                    }
+                }
+            }.coordinateSpace(name: "HomeScrollView")
+        }
+
         @Environment(\.scenePhase) private var scenePhase
 
         var body: some View {
-            GeometryReader { geo in
-                if onboarded.first?.firstRun ?? true, let openAPSSettings = state.openAPSSettings {
-                    /// If old iAPS user pre v5.7.1 OpenAPS settings will be reset, but can be restored in View below
-                    importResetSettingsView(settings: openAPSSettings)
-                } else {
-                    VStack(spacing: 0) {
-                        // Header View
-                        headerView(geo)
-                        ScrollView {
-                            VStack {
-                                // Main Chart
-                                chart
-                                // Adjust hours visible (X-Axis) and ratio display
-                                timeSetting
-                                    .overlay { isfView }
-                                // TIR Chart
-                                if !state.data.glucose.isEmpty {
-                                    preview.padding(.top, 15)
+            GeometryReader { window in
+                let useSideColumn = tentActive || (horizontalSizeClass == .regular && window.size.height > window.size.width)
+                let showActions = !(onboarded.first?.firstRun ?? true) || state.openAPSSettings == nil
+                let leadingInset = max(window.safeAreaInsets.leading, window.frame(in: .global).minX - duoPosture.windowBounds.minX)
+                let trailingInset = max(window.safeAreaInsets.trailing, duoPosture.windowBounds.maxX - window.frame(in: .global).maxX)
+                HStack(spacing: 0) {
+                    GeometryReader { geo in
+                        if onboarded.first?.firstRun ?? true, let openAPSSettings = state.openAPSSettings {
+                            /// If old iAPS user pre v5.7.1 OpenAPS settings will be reset, but can be restored in View below
+                            importResetSettingsView(settings: openAPSSettings)
+                        } else {
+                            Group {
+                                if tentActive {
+                                    tentDashboard(geo, controlTopInset: leadingInset > 0 ? 64 : 0)
+                                } else {
+                                    dashboard(geo)
                                 }
-                                // Loops Chart
-                                loopPreview.padding(.vertical, 15)
-
-                                // COB Chart
-                                if state.carbData > 0 {
-                                    activeCOBView.padding(.bottom, 15)
-                                }
-
-                                // IOB Chart
-                                if !state.iobData.isEmpty {
-                                    activeIOBView.padding(.bottom, 15)
-                                }
-
-                                // Summary Views
-                                insulinView.padding(.bottom, 15)
-                                mealsView.padding(.bottom, 15)
                             }
+                                .background(homeBackground)
+                                .environment(\.colorScheme, tentActive ? .dark : colorScheme)
+                                .ignoresSafeArea(edges: .vertical)
+                                .overlay {
+                                    if !tentActive, let progress = state.bolusProgress, let amount = state.bolusAmount {
+                                        bolusProgressPanel(progress: progress, amount: amount)
+                                        .frame(maxWidth: .infinity, alignment: .center)
+                                        .offset(y: -100)
+                                    }
+                                }
+                                .onChange(of: scenePhase) {
+                                    switch scenePhase {
+                                    case .active:
+                                        state.startTimer()
+                                    case .background,
+                                         .inactive:
+                                        inspectedGlucose = nil
+                                        state.stopTimer()
+                                    default:
+                                        break
+                                    }
+                                }
+                        }
+                    }
+                    if showActions, useSideColumn {
+                        VStack {
+                            if tentActive {
+                                TentPhoneBatteryView(compact: true)
+                                    .padding(.top, window.safeAreaInsets.top + 2)
+                                    .offset(x: -6)
+                            }
+                            Spacer(minLength: 0)
+                            VStack(spacing: 14) {
+                                homeActionButtons
+                            }
+                            .padding(.vertical, 12)
+                            .frame(width: 52)
+                            .background(.ultraThinMaterial, in: Capsule())
                             .background {
-                                // Track vertical scroll
                                 GeometryReader { proxy in
-                                    let scrollPosition = proxy.frame(in: .named("HomeScrollView")).minY
-                                    let yThreshold: CGFloat = -550
-                                    Color.clear
-                                        .onChange(of: scrollPosition) {
-                                            if scrollPosition < yThreshold, state.iobs > 0 || state.carbData > 0,
-                                               !state.skipGlucoseChart
-                                            {
-                                                withAnimation(.easeOut(duration: 0.3)) { displayGlucose = true }
-                                            } else {
-                                                withAnimation(.easeOut(duration: 0.4)) { displayGlucose = false }
-                                            }
-                                        }
+                                    Color.clear.preference(
+                                        key: TentLayoutFramesKey.self,
+                                        value: tentActive ? ["toolbar": proxy.frame(in: .global)] : [:]
+                                    )
                                 }
                             }
-                        }.coordinateSpace(name: "HomeScrollView")
-                        // Buttons
-                        buttonPanel(geo)
-                    }
-                    .background(
-                        colorScheme == .light ? IAPSconfig.homeViewBackgroundLight : IAPSconfig.homeViewBackgrundDark
-                    )
-                    .ignoresSafeArea(edges: .vertical)
-                    .overlay {
-                        if let progress = state.bolusProgress, let amount = state.bolusAmount {
-                            ZStack {
-                                RoundedRectangle(cornerRadius: 15)
-                                    .fill(.gray.opacity(0.9))
-                                    .frame(maxWidth: 320, maxHeight: 90)
-                                bolusProgressView(progress: progress, amount: amount)
-                            }
-                            .frame(maxWidth: .infinity, alignment: .center)
-                            .offset(y: -100)
                         }
-                    }
-                    .onChange(of: scenePhase) {
-                        switch scenePhase {
-                        case .active:
-                            state.startTimer()
-                        case .background,
-                             .inactive:
-                            state.stopTimer()
-                        default:
-                            break
-                        }
+                        .frame(width: tentActive ? 64 : 52)
+                        .padding(.horizontal, 6)
+                        .padding(.bottom, tentActive && trailingInset > 0 ? 42 : 12)
                     }
                 }
+                .ignoresSafeArea(.container, edges: tentActive ? .horizontal : [])
+                .background { homeBackground.ignoresSafeArea() }
+                .toolbar {
+                    if showActions, !useSideColumn {
+                        homeToolbar
+                    }
+                }
+            }
+            .onPreferenceChange(TentLayoutFramesKey.self) { frames in
+                if frames != tentLayoutFrames { tentLayoutFrames = frames }
             }
             .onAppear {
                 if onboarded.first?.firstRun ?? true {
                     state.fetchPreferences()
                 }
             }
+            .background {
+                DuoPostureObserver { posture in
+                    if duoPosture != posture { duoPosture = posture }
+                }
+                .allowsHitTesting(false)
+                TentScreenAwake(posture: duoPosture, isAppActive: tentActive && scenePhase == .active)
+                    .frame(width: 0, height: 0)
+            }
+            .onChange(of: tentActive) { inspectedGlucose = nil }
             .navigationTitle("Home")
             .navigationBarHidden(true)
+            .confirmationDialog("Cancel Profile Override", isPresented: $showCancelAlert) {
+                Button("Cancel Profile Override", role: .destructive) {
+                    state.cancelProfile()
+                    triggerUpdate.toggle()
+                }
+            }
+            .confirmationDialog("Cancel Temporary Target", isPresented: $showCancelTTAlert) {
+                Button("Cancel Temporary Target", role: .destructive) {
+                    state.cancelTempTarget()
+                }
+            }
+            .confirmationDialog("Bolus already in Progress", isPresented: $showBolusActiveAlert) {
+                Button("Bolus already in Progress!", role: .destructive) {
+                    showBolusActiveAlert = false
+                }
+            }
             .ignoresSafeArea(.keyboard)
             .sheet(isPresented: $displayAutoHistory) {
                 AutoISFHistoryView(units: state.data.units)

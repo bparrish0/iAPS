@@ -154,6 +154,8 @@ platform :ios do
       output_name: "iAPS.ipa",
       configuration: "Release",
       destination: 'generic/platform=iOS',
+      # Xcode 27 no longer builds the older deployment targets in bundled dependencies.
+      xcargs: 'IPHONEOS_DEPLOYMENT_TARGET=17.0 WATCHOS_DEPLOYMENT_TARGET=9.0',
       buildlog_path: 'buildlog'
     )
 

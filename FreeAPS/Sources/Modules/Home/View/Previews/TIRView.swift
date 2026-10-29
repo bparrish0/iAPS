@@ -68,7 +68,7 @@ struct PreviewChart: View {
                     .chartLegend(.hidden)
                     .padding(.bottom, 15)
                     .padding(.leading, padding)
-                    .frame(maxWidth: (UIScreen.main.bounds.width / 5) + padding)
+                    .frame(width: 65 + padding)
 
                     sumView(data).offset(x: 0, y: -7)
                 }

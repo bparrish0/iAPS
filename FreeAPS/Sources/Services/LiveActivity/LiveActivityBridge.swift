@@ -1,4 +1,5 @@
 import ActivityKit
+import Combine
 import Foundation
 import Swinject
 import UIKit
@@ -142,6 +143,14 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
     @Injected() private var settingsManager: SettingsManager!
     @Injected() private var storage: FileStorage!
     @Injected() private var broadcaster: Broadcaster!
+    @Injected() private var apsManager: APSManager!
+
+    private var subscriptions = Set<AnyCancellable>()
+    @MainActor private var latestContent: LiveActivityAttributes.ContentState?
+    @MainActor private var bolusDelivered: Double?
+    @MainActor private var bolusUpdatedAt: Date?
+    @MainActor private var bolusBackgroundTask: UIBackgroundTaskIdentifier = .invalid
+    @MainActor private var bolusBackgroundExpired = false
 
     private let coreDataStorage = CoreDataStorage()
 
@@ -172,7 +181,7 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
             object: nil,
             queue: nil
         ) { _ in
-            self.forceActivityUpdate()
+            self.forceActivityUpdate(force: true)
         }
 
         Foundation.NotificationCenter.default.addObserver(
@@ -187,6 +196,44 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
         broadcaster.register(SettingsObserver.self, observer: self)
 
         monitorForLiveActivityAuthorizationChanges()
+
+        apsManager.bolusDeliveredUnits
+            .removeDuplicates()
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] units in
+                Task { @MainActor [weak self] in
+                    await self?.updateBolusDelivery(units)
+                }
+            }
+            .store(in: &subscriptions)
+    }
+
+    @MainActor private func updateBolusDelivery(_ units: Decimal?) async {
+        defer {
+            if units == nil || !settings.useLiveActivity { endBolusBackgroundTask() }
+        }
+        bolusDelivered = units.map { Double(truncating: $0 as NSNumber) }
+        bolusUpdatedAt = units == nil ? nil : Date()
+        if units == nil { bolusBackgroundExpired = false }
+        if units != nil, settings.useLiveActivity, bolusBackgroundTask == .invalid, !bolusBackgroundExpired {
+            bolusBackgroundTask = UIApplication.shared.beginBackgroundTask(withName: "Bolus Live Activity") { [weak self] in
+                Task { @MainActor in
+                    self?.bolusBackgroundExpired = true
+                    self?.endBolusBackgroundTask()
+                }
+            }
+        }
+        if let latestContent {
+            await pushUpdate(latestContent)
+        } else if units != nil {
+            forceActivityUpdate(force: true)
+        }
+    }
+
+    @MainActor private func endBolusBackgroundTask() {
+        guard bolusBackgroundTask != .invalid else { return }
+        UIApplication.shared.endBackgroundTask(bolusBackgroundTask)
+        bolusBackgroundTask = .invalid
     }
 
     func settingsDidChange(_ newSettings: FreeAPSSettings) {
@@ -234,6 +281,16 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
 
     /// attempts to present this live activity state, creating a new activity if none exists yet
     @MainActor private func pushUpdate(_ state: LiveActivityAttributes.ContentState) async {
+        latestContent = state.withBolusDelivery(nil, updatedAt: nil)
+        guard settings.useLiveActivity else {
+            endBolusBackgroundTask()
+            await endActivity()
+            return
+        }
+        let state = state.withBolusDelivery(bolusDelivered, updatedAt: bolusUpdatedAt)
+        // A frozen progress amount must stop appearing as an active delivery.
+        let staleDate = state.bolusUpdatedAt?.addingTimeInterval(60) ??
+            min(state.date, Date.now).addingTimeInterval(TimeInterval(12 * 60))
         // hide duplicate/unknown activities
         for unknownActivity in Activity<LiveActivityAttributes>.activities
             .filter({ self.currentActivity?.activity.id != $0.id })
@@ -263,12 +320,12 @@ final class LiveActivityBridge: Injectable, ObservableObject, SettingsObserver {
                         )
                         return ActivityContent(
                             state: state.withoutPredictions(),
-                            staleDate: min(state.date, Date.now).addingTimeInterval(TimeInterval(12 * 60))
+                            staleDate: staleDate
                         )
                     } else {
                         return ActivityContent(
                             state: state,
-                            staleDate: min(state.date, Date.now).addingTimeInterval(TimeInterval(12 * 60))
+                            staleDate: staleDate
                         )
                     }
                 }()

@@ -13,6 +13,9 @@ struct CurrentGlucoseView: View {
     @Binding var displaySAGE: Bool
     @Binding var displayExpiration: Bool
     @Binding var sensordays: Double
+    var inspectedGlucose: BloodGlucose? = nil
+
+    private var displayedGlucose: BloodGlucose? { inspectedGlucose ?? recentGlucose }
 
     @Environment(\.colorScheme) var colorScheme
     @Environment(\.sizeCategory) private var fontSize
@@ -66,7 +69,7 @@ struct CurrentGlucoseView: View {
         return formatter
     }
 
-    private var dateFormatter: DateFormatter {
+    private var timeFormatter: DateFormatter {
         let formatter = DateFormatter()
         formatter.timeStyle = .short
         return formatter
@@ -93,25 +96,28 @@ struct CurrentGlucoseView: View {
 
     var glucoseView: some View {
         ZStack {
-            if let recent = recentGlucose {
-                if displayDelta, !scrolling, let deltaInt = delta,
+            if let recent = displayedGlucose {
+                if inspectedGlucose == nil, displayDelta, !scrolling, let deltaInt = delta,
                    !(units == .mmolL && abs(deltaInt) <= 1) { deltaView(deltaInt) }
                 if displayExpiration || displaySAGE {
                     sageView
                 }
                 VStack(spacing: 15) {
                     let formatter = recent.type == GlucoseType.manual.rawValue ? manualGlucoseFormatter : glucoseFormatter
-                    if let string = recent.unfiltered.map({
+                    let value = inspectedGlucose == nil ? recent.unfiltered : recent.glucose.map { Decimal($0) }
+                    if let string = value.map({
                         formatter
                             .string(from: Double(units == .mmolL ? $0.asMmolL : $0) as NSNumber) ?? "" })
                     {
                         glucoseText(string).asAny()
                             .background { glucoseDrop }
-                        if !scrolling {
+                        if !scrolling || inspectedGlucose != nil {
                             let minutesAgo = -1 * recent.dateString.timeIntervalSinceNow / 60
                             let text = timaAgoFormatter.string(for: Double(minutesAgo)) ?? ""
                             Text(
-                                minutesAgo <= 1 ? NSLocalizedString("Now", comment: "") :
+                                inspectedGlucose != nil ?
+                                    timeFormatter.string(from: recent.dateString) :
+                                    minutesAgo <= 1 ? NSLocalizedString("Now", comment: "") :
                                     (text + " " + NSLocalizedString("min", comment: "Short form for minutes") + " ")
                             )
                             .font(.caption)
@@ -173,7 +179,7 @@ struct CurrentGlucoseView: View {
 
     private var adjustments: (degree: Double, x: CGFloat, y: CGFloat) {
         let yOffset: CGFloat = 17
-        guard let direction = recentGlucose?.direction else {
+        guard let direction = displayedGlucose?.direction else {
             return (90, 0, yOffset)
         }
         switch direction {
@@ -226,11 +232,17 @@ struct CurrentGlucoseView: View {
                 }
                 .tracking(-1)
                 .offset(x: -2, y: 14)
-                .foregroundColor(alwaysUseColors ? colorOfGlucose : alarm == nil ? .primary : .loopRed)
+                .foregroundColor(
+                    alwaysUseColors ? colorOfGlucose : (inspectedGlucose != nil || alarm == nil) ? .primary :
+                        .loopRed
+                )
             } else {
                 Text(string)
                     .font(scrolling ? .glucoseSmallFont : .glucoseFontMdDl.width(.condensed)) // .tracking(-2)
-                    .foregroundColor(alwaysUseColors ? colorOfGlucose : alarm == nil ? .primary : .loopRed)
+                    .foregroundColor(
+                        alwaysUseColors ? colorOfGlucose : (inspectedGlucose != nil || alarm == nil) ? .primary :
+                            .loopRed
+                    )
                     .offset(x: string.count > 2 ? -1 : -1, y: 16)
             }
         }
@@ -250,7 +262,7 @@ struct CurrentGlucoseView: View {
     }
 
     private var colorOfGlucose: Color {
-        let whichGlucose = recentGlucose?.glucose ?? 0
+        let whichGlucose = displayedGlucose?.glucose ?? 0
         guard lowGlucose < highGlucose else { return .primary }
 
         switch whichGlucose {

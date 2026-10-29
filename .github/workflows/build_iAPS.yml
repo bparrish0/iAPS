@@ -2,6 +2,11 @@ name: 4. Build iAPS
 run-name: Build iAPS (${{ github.ref_name }})
 on:
   workflow_dispatch:
+    inputs:
+      retain_build_artifacts:
+        description: Keep IPA and symbols for 7 days (uses Actions storage)
+        type: boolean
+        default: false
   
   # this will trigger this workflow for any push to any branch that this workflow is
   # active on, *but*, the auto_build_check job will check to see if this branch is
@@ -68,10 +73,9 @@ jobs:
   build:
     name: Build
     needs: [check_certs,check_latest_from_upstream]
-    # Pinned: macos-latest is migrating to macos-26, whose image doesn't have the iOS
-    # platform installed for Xcode 26.1.1 ("iOS 26.1 is not installed"), so builds fail
-    # depending on which image the run lands on. Re-evaluate when macos-26 stabilizes.
-    runs-on: macos-15
+    # The iOS 27.1 SDK enables native resizing and full display support on iPhone Duo.
+    # GitHub's xcode-27 image includes this SDK; macos-26 still ships Xcode 26.x.
+    runs-on: xcode-27
     permissions:
       contents: write
     steps:
@@ -85,7 +89,10 @@ jobs:
           fi
 
       - name: Select Xcode version
-        run: "sudo xcode-select --switch /Applications/Xcode_26.1.1.app/Contents/Developer"
+        run: |
+          sudo xcode-select --switch /Applications/Xcode_27.1.app/Contents/Developer
+          xcodebuild -version
+
       
       - name: Checkout Repo for syncing
         if: |
@@ -132,6 +139,9 @@ jobs:
           submodules: recursive
           ref: ${{ env.TARGET_BRANCH }}
 
+      - name: Run battery discharge regressions
+        run: Tests/run-battery-discharge-tests.sh
+
       # Ensure compatible Bundler version for Fastlane (fastlane requires bundler < 3)
       - name: Install Bundler 2.x
         run: |
@@ -140,7 +150,12 @@ jobs:
 
       # Patch Fastlane Match to not print tables
       - name: Patch Match Tables
-        run: find /usr/local/lib/ruby/gems -name table_printer.rb | xargs sed -i "" "/puts(Terminal::Table.new(params))/d"
+        run: |
+          ruby -e 'puts Gem.path' | while IFS= read -r gem_path; do
+            if [ -d "$gem_path" ]; then
+              find "$gem_path" -name table_printer.rb -exec sed -i "" "/puts(Terminal::Table.new(params))/d" {} +
+            fi
+          done
       
       # Install project dependencies
       - name: Install project dependencies
@@ -176,12 +191,22 @@ jobs:
           FASTLANE_KEY: ${{ secrets.FASTLANE_KEY }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
 
-      # Upload Build artifacts
-      - name: Upload build log, IPA and Symbol artifacts
+      # TestFlight already stores the installable build. Keep small, short-lived logs
+      # by default instead of accumulating ~235 MB of IPA/symbol files per push.
+      - name: Upload build logs
         if: always()
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-logs
+          path: buildlog
+          retention-days: 7
+
+      - name: Upload requested IPA and symbols
+        if: github.event_name == 'workflow_dispatch' && inputs.retain_build_artifacts
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: build-artifacts
-          path: |
-            artifacts
-            buildlog
+          path: artifacts
+          retention-days: 7

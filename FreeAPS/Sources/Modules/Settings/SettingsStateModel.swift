@@ -27,7 +27,6 @@ extension Settings {
         private(set) var copyrightNotice = ""
 
         override func subscribe() {
-            nightscoutManager.fetchVersion()
             subscribeSetting(\.debugOptions, on: $debugOptions) { debugOptions = $0 }
             subscribeSetting(\.closedLoop, on: $closedLoop) { closedLoop = $0 }
             subscribeSetting(\.profileID, on: $profileID) { profileID = $0 }
@@ -39,7 +38,7 @@ extension Settings {
 
             broadcaster.register(SettingsObserver.self, observer: self)
             buildNumber = Bundle.main.infoDictionary?["CFBundleVersion"] as? String ?? "Unknown"
-            versionNumber = Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "Unknown"
+            versionNumber = Bundle.main.releaseVersionNumber ?? "Unknown"
 
             // Read branch information from the branch.txt instead of infoDictionary
             if let branchFileURL = Bundle.main.url(forResource: "branch", withExtension: "txt"),

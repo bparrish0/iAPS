@@ -25,16 +25,10 @@ struct Popup<T: View>: ViewModifier {
             if isPresented {
                 popup
                     .animation(type)
-                    .transition(.offset(x: 0, y: direction.offset(popupFrame: geometry.frame(in: .global))))
+                    .transition(.offset(x: 0, y: direction.offset(containerHeight: geometry.size.height)))
                     .frame(width: geometry.size.width, height: geometry.size.height, alignment: alignment)
             }
         }
-    }
-}
-
-private extension GeometryProxy {
-    var belowScreenEdge: CGFloat {
-        UIScreen.main.bounds.height - frame(in: .global).minY
     }
 }
 
@@ -44,16 +38,14 @@ extension Popup {
         case bottom
         case center
 
-        func offset(popupFrame: CGRect) -> CGFloat {
+        func offset(containerHeight: CGFloat) -> CGFloat {
             switch self {
             case .top:
-                let aboveScreenEdge = -popupFrame.maxY
-                return aboveScreenEdge
+                return -containerHeight
             case .bottom:
-                let belowScreenEdge = UIScreen.main.bounds.height - popupFrame.minY
-                return belowScreenEdge
+                return containerHeight
             case .center:
-                return UIScreen.main.bounds.midY
+                return containerHeight / 2
             }
         }
     }

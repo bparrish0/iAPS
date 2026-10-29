@@ -78,7 +78,8 @@ struct IllustrationView: View {
             }
         }
         .chartLegend(.hidden)
-        .frame(maxWidth: UIScreen.main.bounds.width, maxHeight: UIScreen.main.bounds.height * 0.15)
+        .frame(maxWidth: .infinity)
+        .frame(height: 160)
         .padding(20)
         .chartYScale(
             domain: minimum * 1.1 ... maximum

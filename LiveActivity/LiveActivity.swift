@@ -38,7 +38,11 @@ struct LiveActivity: Widget {
                 // various regions, like leading/trailing/center/bottom
                 DynamicIslandExpandedRegion(.leading) {
                     HStack {
-                        loop(context: context, size: 23)
+                        if let delivered = context.state.bolusDeliveryLabel, !context.isStale {
+                            bolusDelivery(delivered, size: 36)
+                        } else {
+                            loop(context: context, size: 23)
+                        }
                     }.padding(10)
                 }
 
@@ -63,31 +67,63 @@ struct LiveActivity: Widget {
                 }
                 DynamicIslandExpandedRegion(.bottom) {}
             } compactLeading: {
-                HStack {
-                    loop(context: context, size: 12)
-                    bgAndTrend(context: context, size: .compact).0.padding(.leading, 4)
-                }
+                compactGlucose(context: context)
             } compactTrailing: {
-                changeLabel(context: context).padding(.trailing, 4)
-            } minimal: {
-                let (_label, characterCount) = bgAndTrend(context: context, size: .minimal)
-
-                let label = _label.padding(.leading, 7).padding(.trailing, 3)
-
-                if characterCount < 4 {
-                    label
-                } else if characterCount < 5 {
-                    label.fontWidth(.condensed)
-                } else {
-                    label.fontWidth(.compressed)
+                if context.state.bolusDeliveryLabel == nil || context.isStale {
+                    compactDelta(context: context)
                 }
+            } minimal: {
+                compactGlucose(context: context)
             }
             .widgetURL(URL(string: "freeaps-x://"))
             // .keylineTint(Color.purple)
-            .contentMargins(.horizontal, 0, for: .minimal)
-            .contentMargins(.trailing, 0, for: .compactLeading)
-            .contentMargins(.leading, 0, for: .compactTrailing)
+            .contentMargins(.all, 0, for: .minimal)
+            .contentMargins(.all, 0, for: .compactLeading)
+            .contentMargins(.all, 0, for: .compactTrailing)
         }
+    }
+
+    @ViewBuilder private func compactGlucose(context: ActivityViewContext<LiveActivityAttributes>) -> some View {
+        if let delivered = context.state.bolusDeliveryLabel, !context.isStale {
+            bolusDelivery(delivered, size: 28)
+                .frame(maxWidth: .infinity, alignment: .center)
+        } else {
+            Text(context.state.bg)
+                .font(.headline)
+                .fontWidth(.condensed)
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .center)
+        }
+    }
+
+    private func bolusDelivery(_ delivered: String, size: CGFloat) -> some View {
+        Text(delivered)
+            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .monospacedDigit()
+            .lineLimit(1)
+            .minimumScaleFactor(0.5)
+            .padding(3)
+            .frame(width: size, height: size)
+            .overlay(Circle().strokeBorder(Color.insulin, lineWidth: 2))
+            .accessibilityLabel("Insulin delivered")
+            .accessibilityValue(delivered + " U")
+    }
+
+    private func compactDelta(context: ActivityViewContext<LiveActivityAttributes>) -> some View {
+        ZStack {
+            Circle().strokeBorder(loopColor(context: context), lineWidth: 1.5)
+            changeLabel(context: context)
+                .font(.system(size: 10, weight: .semibold, design: .rounded))
+                .monospacedDigit()
+                .lineLimit(1)
+                .minimumScaleFactor(0.5)
+                .padding(.horizontal, 2)
+        }
+        .frame(width: 20, height: 20)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 
     @ViewBuilder private func changeLabel(context: ActivityViewContext<LiveActivityAttributes>) -> some View {
@@ -180,10 +216,13 @@ struct LiveActivity: Widget {
         .foregroundStyle(.loopYellow)
     }
 
-    private func loop(context: ActivityViewContext<LiveActivityAttributes>, size: CGFloat) -> some View {
+    private func loopColor(context: ActivityViewContext<LiveActivityAttributes>) -> Color {
         let timeAgo = abs(context.state.loopDate.timeIntervalSinceNow) / 60
-        let color: Color = timeAgo > 8 ? .loopYellow : timeAgo > 12 ? .loopRed : .loopGreen
-        return LoopActivity(stroke: color, compact: size == 12).frame(width: size)
+        return timeAgo > 12 ? .loopRed : timeAgo > 8 ? .loopYellow : .loopGreen
+    }
+
+    private func loop(context: ActivityViewContext<LiveActivityAttributes>, size: CGFloat) -> some View {
+        LoopActivity(stroke: loopColor(context: context), compact: size == 12).frame(width: size)
     }
 
     private var emptyText: some View {

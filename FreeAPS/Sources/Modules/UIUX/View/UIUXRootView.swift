@@ -38,6 +38,8 @@ extension UIUX {
 
         var body: some View {
             Form {
+                TentModeSettings()
+
                 Section {
                     Toggle("Display Chart X - Grid lines", isOn: $state.xGridLines)
                     Toggle("Display Chart Y - Grid lines", isOn: $state.yGridLines)

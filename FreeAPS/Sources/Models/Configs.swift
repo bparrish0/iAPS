@@ -66,7 +66,7 @@ extension Font {
 
     static let bolusProgressStopFont = Font.custom("BolusProgressStop", fixedSize: 24)
     static let bolusProgressFont = Font.custom("BolusProgress", fixedSize: 20)
-    static let bolusProgressBarFont = Font.custom("BolusProgressBarFont", fixedSize: 18)
+    static let bolusProgressBarFont = Font.system(size: 24, weight: .semibold)
 
     static let chartTimeFont = Font.custom("ChartTimeFont", fixedSize: 14)
     static let timeSettingFont = Font.custom("TimeSettingFont", fixedSize: 14)

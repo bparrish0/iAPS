@@ -12,13 +12,6 @@ extension Settings {
         @State private var deletionAlert = false
 
         @FetchRequest(
-            entity: VNr.entity(),
-            sortDescriptors: [NSSortDescriptor(key: "date", ascending: false)], predicate: NSPredicate(
-                format: "nr != %@", "" as String
-            )
-        ) var fetchedVersionNumber: FetchedResults<VNr>
-
-        @FetchRequest(
             entity: OverridePresets.entity(),
             sortDescriptors: [NSSortDescriptor(key: "name", ascending: true)], predicate: NSPredicate(
                 format: "name != %@", "" as String
@@ -46,12 +39,6 @@ extension Settings {
                             Text(
                                 "iAPS v\(state.versionNumber) (\(state.buildNumber))\nBranch: \(state.branch) \(state.copyrightNotice)"
                             )
-                        }
-
-                        if let latest = fetchedVersionNumber.first, let nr = latest.nr, nr > state.versionNumber {
-                            Text("Newer release availabe at GitHub: " + nr)
-                                .foregroundStyle(.orange).bold()
-                                .multilineTextAlignment(.leading)
                         }
                     }
                 }

@@ -17,16 +17,18 @@ extension Main {
         }
 
         var body: some View {
-            router.view(for: .home)
-                .sheet(isPresented: $state.isModalPresented) {
-                    NavigationView { self.state.modal!.view }
-                        .navigationViewStyle(StackNavigationViewStyle())
-                        .environment(\.colorScheme, colorScheme)
-                }
-                .sheet(isPresented: $state.isSecondaryModalPresented) {
-                    state.secondaryModalView ?? EmptyView().asAny()
-                }
-                .environment(\.colorScheme, colorScheme)
+            NavigationStack {
+                router.view(for: .home)
+            }
+            .sheet(isPresented: $state.isModalPresented) {
+                NavigationView { self.state.modal!.view }
+                    .navigationViewStyle(StackNavigationViewStyle())
+                    .environment(\.colorScheme, colorScheme)
+            }
+            .sheet(isPresented: $state.isSecondaryModalPresented) {
+                state.secondaryModalView ?? EmptyView().asAny()
+            }
+            .environment(\.colorScheme, colorScheme)
         }
     }
 }

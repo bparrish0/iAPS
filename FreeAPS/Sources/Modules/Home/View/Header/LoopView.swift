@@ -14,6 +14,7 @@ struct LoopView: View {
     @Binding var isLooping: Bool
     @Binding var lastLoopDate: Date
     @Binding var manualTempBasal: Bool
+    var showTitle = true
 
     private var dateFormatter: DateFormatter {
         let formatter = DateFormatter()
@@ -28,12 +29,14 @@ struct LoopView: View {
         VStack(spacing: 2) {
             let multiplyForLargeFonts = fontSize > .extraLarge ? 1.1 : 1
 
-            HStack(spacing: 0) {
-                Text("i").font(.system(size: 10, design: .rounded)).offset(y: 0.35)
-                Text("APS").font(.system(size: 12, design: .rounded))
+            if showTitle {
+                HStack(spacing: 0) {
+                    Text("i").font(.system(size: 10, design: .rounded)).offset(y: 0.35)
+                    Text("APS").font(.system(size: 12, design: .rounded))
+                }
+                .foregroundStyle(.secondary.opacity(0.7))
+                .carvingOrRelief(carve: colorScheme == .light)
             }
-            .foregroundStyle(.secondary.opacity(0.7))
-            .carvingOrRelief(carve: colorScheme == .light)
 
             LoopEllipse(stroke: color)
                 .frame(width: minutesAgo > 9 ? 50 * multiplyForLargeFonts : 50 * multiplyForLargeFonts, height: 27)

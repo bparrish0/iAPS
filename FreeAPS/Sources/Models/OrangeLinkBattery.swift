@@ -17,6 +17,8 @@ struct BatteryDischargeConfig: Sendable {
     let defaultFreshValue: Double
     /// Voltage where the cell is considered spent — bottom of the default discharge table.
     let defaultDepletedValue: Double
+    /// Only fresh pump batteries get startup-dip recovery; leave other battery types unchanged.
+    let startupRecoveryWindow: TimeInterval
 
     /// OrangeLink/RileyLink CR2032-class cell: ~3.4V fresh, drops into the 2.x range when dying,
     /// ~29-day default lifetime.
@@ -27,7 +29,8 @@ struct BatteryDischargeConfig: Sendable {
         defaultLifetime: 29 * 86400,
         maxStoredCycles: 10,
         defaultFreshValue: 3.4,
-        defaultDepletedValue: 2.8
+        defaultDepletedValue: 2.8,
+        startupRecoveryWindow: 0
     )
 
     /// Medtronic AA pump battery: fresh ≥1.5V, dying ~1.0V, ~15-day default lifetime. Same
@@ -39,7 +42,8 @@ struct BatteryDischargeConfig: Sendable {
         defaultLifetime: 15 * 86400,
         maxStoredCycles: 10,
         defaultFreshValue: 1.55,
-        defaultDepletedValue: 1.1
+        defaultDepletedValue: 1.1,
+        startupRecoveryWindow: 86400
     )
 }
 
@@ -211,6 +215,10 @@ enum BatteryDischargeTracker {
     /// consecutive readings in a band are required before it counts.
     static let smoothingWindow = 3
 
+    /// Require an hour back at fresh voltage, and never forgive a dip lasting over two hours.
+    static let startupRecoveryConfirmation: TimeInterval = 3600
+    static let maximumStartupDipDuration: TimeInterval = 2 * 3600
+
     /// Record a new reading; mutates `log` in place.
     static func record(
         value: Double,
@@ -346,8 +354,46 @@ enum BatteryDischargeTracker {
         }
 
         let lvl = level(for: smoothed, config: config)
+        repairRecoveredStartupDip(&log, smoothed: smoothed, at: date, config: config)
         if !log.currentLevelTimes.contains(where: { $0.level == lvl }) {
             log.currentLevelTimes.append(BatteryLevelTime(level: lvl, date: date))
+        }
+    }
+
+    /// A fresh AA can briefly sag into the 1.50 V band under load, then recover. That band
+    /// normally represents a week-old battery, so keeping its first crossing forever can
+    /// halve a new battery's estimate. Repair only non-depleted startup dips after sustained
+    /// fresh voltage. This runs on existing logs too; no history or learned cycles are erased.
+    static func repairRecoveredStartupDip(
+        _ log: inout BatteryDischargeLog,
+        smoothed: Double,
+        at date: Date,
+        config: BatteryDischargeConfig
+    ) {
+        guard config.startupRecoveryWindow > 0,
+              log.cycleIsLearnable,
+              log.lowSeenThisCycle == false,
+              let start = log.replacementDate,
+              smoothed >= config.replacementHighThreshold,
+              let history = log.readingHistory,
+              let coverageStart = history.first?.date
+        else { return }
+
+        let events = history.filter { $0.date >= start && $0.date <= date }
+        guard let lastDip = events.lastIndex(where: { $0.value < config.replacementHighThreshold }),
+              lastDip + 1 < events.count
+        else { return }
+        let recovery = events[lastDip + 1].date
+        guard date.timeIntervalSince(recovery) >= startupRecoveryConfirmation else { return }
+
+        let lowLevel = level(for: config.replacementLowThreshold, config: config)
+        let freshLevel = level(for: config.replacementHighThreshold, config: config)
+        log.currentLevelTimes.removeAll { crossing in
+            crossing.level >= lowLevel && crossing.level < freshLevel &&
+                crossing.date >= start && crossing.date >= coverageStart &&
+                crossing.date.timeIntervalSince(start) <= config.startupRecoveryWindow &&
+                recovery >= crossing.date &&
+                recovery.timeIntervalSince(crossing.date) <= maximumStartupDipDuration
         }
     }
 

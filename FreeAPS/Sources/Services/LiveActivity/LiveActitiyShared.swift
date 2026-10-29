@@ -17,6 +17,26 @@ struct LiveActivityAttributes: ActivityAttributes {
         let showChart: Bool
         let chartLowThreshold: Int16
         let chartHighThreshold: Int16
+        var bolusDelivered: Double? = nil
+        var bolusUpdatedAt: Date? = nil
+
+        var bolusDeliveryLabel: String? {
+            guard let bolusDelivered, bolusDelivered.isFinite, bolusDelivered >= 0 else { return nil }
+            let formatter = NumberFormatter()
+            formatter.numberStyle = .decimal
+            formatter.minimumFractionDigits = 1
+            formatter.maximumFractionDigits = 1
+            // Never round up to insulin that has not yet been delivered.
+            formatter.roundingMode = .down
+            return formatter.string(from: NSNumber(value: bolusDelivered))
+        }
+
+        func withBolusDelivery(_ units: Double?, updatedAt: Date?) -> ContentState {
+            var copy = self
+            copy.bolusDelivered = units
+            copy.bolusUpdatedAt = updatedAt
+            return copy
+        }
 
         func withoutPredictions() -> ContentState {
             ContentState(
@@ -33,7 +53,9 @@ struct LiveActivityAttributes: ActivityAttributes {
                 predictions: nil,
                 showChart: showChart,
                 chartLowThreshold: chartLowThreshold,
-                chartHighThreshold: chartHighThreshold
+                chartHighThreshold: chartHighThreshold,
+                bolusDelivered: bolusDelivered,
+                bolusUpdatedAt: bolusUpdatedAt
             )
         }
     }

@@ -2,7 +2,12 @@ import Foundation
 
 extension Bundle {
     var releaseVersionNumber: String? {
-        infoDictionary?["CFBundleShortVersionString"] as? String
+        if let customVersion = infoDictionary?["IAPSCustomVersion"] as? String,
+           !customVersion.isEmpty, !customVersion.contains("$(")
+        {
+            return customVersion
+        }
+        return infoDictionary?["CFBundleShortVersionString"] as? String
     }
 
     var buildVersionNumber: String? {

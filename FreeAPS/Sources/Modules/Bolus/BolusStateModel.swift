@@ -5,7 +5,6 @@ import Swinject
 
 extension Bolus {
     final class StateModel: BaseStateModel<Provider> {
-        @Injected() var unlockmanager: UnlockManager!
         @Injected() var deviceManager: DeviceDataManager!
         @Injected() var apsManager: APSManager!
         @Injected() var broadcaster: Broadcaster!
@@ -269,14 +268,9 @@ extension Bolus {
 
             let maxAmount = Double(min(amount, provider.pumpSettings().maxBolus))
 
-            unlockmanager.unlock()
-                .sink { _ in } receiveValue: { [weak self] _ in
-                    guard let self = self else { return }
-                    self.save()
-                    self.apsManager.enactBolus(amount: maxAmount, isSMB: false)
-                    self.showModal(for: nil)
-                }
-                .store(in: &lifetime)
+            save()
+            apsManager.enactBolus(amount: maxAmount, isSMB: false)
+            showModal(for: nil)
         }
 
         func save() {

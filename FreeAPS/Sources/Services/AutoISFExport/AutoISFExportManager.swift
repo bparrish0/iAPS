@@ -391,7 +391,7 @@ final class BaseAutoISFExportManager: AutoISFExportManager, Injectable {
 
     static var appVersion: String {
         let info = Bundle.main.infoDictionary
-        let version = info?["CFBundleShortVersionString"] as? String ?? "?"
+        let version = Bundle.main.releaseVersionNumber ?? "?"
         let build = info?["CFBundleVersion"] as? String ?? "?"
         return "\(version) (\(build))"
     }
